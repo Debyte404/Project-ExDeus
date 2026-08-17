@@ -12,7 +12,7 @@
 
 ## Teaching contract
 
-The agent may create directories, CMake files, headers containing interfaces and TODO exercises, test harnesses, examples, and book explanations. The user writes the production C++ function bodies. Each lesson must contain:
+The agent may create directories, CMake files, headers containing interfaces and guided exercise markers, test harnesses, examples, and book explanations. The user writes the production C++ function bodies. Each lesson must contain:
 
 1. The exact file to open.
 2. The learning objective.
