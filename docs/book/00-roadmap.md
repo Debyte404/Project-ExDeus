@@ -15,6 +15,18 @@ For every chapter:
 
 Do not jump ahead to the parser or storage format. The project is ordered so each new idea has a previous idea to stand on.
 
+## Documentation rule
+
+No implementation change is considered complete until its book chapter or relevant lesson section is updated in the same change. Every change must explain:
+
+- which file changed and why it owns that responsibility
+- how the new code connects to earlier files
+- what the important lines mean
+- what exercise or test demonstrates the behavior
+- which build and test command verifies it
+
+If an implementation decision changes the language, engine boundary, file format, or week-2 upgrade path, update the design specification as well as the book.
+
 ## Milestones
 
 | Lessons | Result | Main C++ ideas |
