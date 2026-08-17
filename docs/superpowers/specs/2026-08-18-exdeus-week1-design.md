@@ -50,7 +50,7 @@ The REPL is the first client. It reads one command or command block, sends it to
 The language keeps database creation and database selection as two explicit commands. The first version may use familiar structural words such as `create` and `use` where they improve clarity; the language becomes distinct through its complete command grammar and execution model rather than by renaming every database operation:
 
 ```text
-create database bank;
+create db bank;
 harness bank;
 
 forge table customers with
@@ -71,12 +71,12 @@ change customers
   set balance to balance plus 500
   where account_type equals "savings"
 
-save database to "bank.exd";
-load database from "bank.exd";
+save db to "bank.exd";
+load db from "bank.exd";
 export customers to "customers.csv";
 ```
 
-`create database bank;` creates the database but does not implicitly select it. `harness bank;` selects an existing database for subsequent table commands. `harness` is the canonical ExdeusQL command for database selection; it is not a shortcut that creates a database.
+`create db bank;` creates the database but does not implicitly select it. `harness bank;` selects an existing database for subsequent table commands. `harness` is the canonical ExdeusQL command for database selection; it is not a shortcut that creates a database. `db` is the canonical ExdeusQL abbreviation for database.
 
 The first grammar will be small and strict. Parser errors will report the unexpected token, its location, and a short correction hint where possible.
 
