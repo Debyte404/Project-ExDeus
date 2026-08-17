@@ -47,10 +47,11 @@ The REPL is the first client. It reads one command or command block, sends it to
 
 ## Language direction
 
-The language uses verbs that describe database actions without copying SQL keywords directly:
+The language keeps database creation and database selection as two explicit commands. The first version may use familiar structural words such as `create` and `use` where they improve clarity; the language becomes distinct through its complete command grammar and execution model rather than by renaming every database operation:
 
 ```text
-harness bank
+create database bank;
+use bank;
 
 forge table customers with
   id: integer unique,
@@ -70,10 +71,12 @@ change customers
   set balance to balance plus 500
   where account_type equals "savings"
 
-save database to "bank.exd"
-load database from "bank.exd"
-export customers to "customers.csv"
+save database to "bank.exd";
+load database from "bank.exd";
+export customers to "customers.csv";
 ```
+
+`create database bank;` creates the database but does not implicitly select it. `use bank;` selects an existing database for subsequent table commands. A future convenience command such as `harness bank;` may combine those actions, but it is not part of the week-1 default grammar.
 
 The first grammar will be small and strict. Parser errors will report the unexpected token, its location, and a short correction hint where possible.
 
