@@ -51,7 +51,7 @@ The language keeps database creation and database selection as two explicit comm
 
 ```text
 create database bank;
-use bank;
+harness bank;
 
 forge table customers with
   id: integer unique,
@@ -76,7 +76,7 @@ load database from "bank.exd";
 export customers to "customers.csv";
 ```
 
-`create database bank;` creates the database but does not implicitly select it. `use bank;` selects an existing database for subsequent table commands. A future convenience command such as `harness bank;` may combine those actions, but it is not part of the week-1 default grammar.
+`create database bank;` creates the database but does not implicitly select it. `harness bank;` selects an existing database for subsequent table commands. `harness` is the canonical ExdeusQL command for database selection; it is not a shortcut that creates a database.
 
 The first grammar will be small and strict. Parser errors will report the unexpected token, its location, and a short correction hint where possible.
 
