@@ -59,9 +59,11 @@ Run:
 
 ```powershell
 cmake -S . -B build
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --build build --config Debug
+ctest --test-dir build -C Debug --output-on-failure
 ```
+
+On Visual Studio generators, CMake creates a multi-configuration build tree. `--config Debug` tells the build command which configuration to compile, and `-C Debug` tells CTest where to find that configuration's test executable. Without those options, CTest may report `Test not available without configuration` even though configuration succeeded.
 
 ## What you should understand before continuing
 
