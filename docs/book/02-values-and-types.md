@@ -100,6 +100,54 @@ Complete these in order:
 
 Do not add null values, dates, automatic conversions, or arithmetic yet. Those are separate design decisions.
 
+## How to approach `value.cpp`
+
+The `.cpp` file is the implementation side of the declarations you wrote in the header. Work from the bottom of the class outward:
+
+1. Include your own header first: `#include "exdeus/core/value.hpp"`.
+2. Open the same `exdeus::core` namespace.
+3. Define the private constructor. Its initializer list should copy the incoming type and data into `type_` and `data_`.
+4. Define each factory. Each factory should create a `Value` with the matching `ValueType` and the matching `Data` alternative.
+5. Define the two accessors. They simply return the stored members and should not change the object.
+6. Define `to_string()` last because it is the first function that must inspect the variant's active alternative.
+7. Define equality by comparing both the type tag and the stored variant.
+
+Use the compiler after each small group. If the constructor compiles, then add factories. Do not write all seven functions before building; a small compile error is easier to understand than seven errors at once.
+
+For `to_string()`, `std::visit` receives the currently active value. Inside the visitor, use `if constexpr` with `std::is_same_v` to distinguish `std::string` and `bool` from numeric values. Text should return itself; booleans should return `true` or `false`; numbers can use `std::to_string` for this first version.
+
+## How the test executable is connected
+
+There is one `main()` in `tests/test_main.cpp`. The individual test file should expose a function such as `run_value_tests()`, and `test_main.cpp` should call it. This keeps the executable entry point separate from the lesson-specific checks.
+
+The shape is:
+
+```cpp
+// tests/value_tests.cpp
+void run_value_tests() {
+    // construct Values and check their public behavior here
+}
+
+// tests/test_main.cpp
+void run_value_tests();
+
+int main() {
+    run_value_tests();
+}
+```
+
+For the first version, a simple `assert` or a tiny `check` helper is enough. A test should answer one question, for example: “does `Value::integer(7)` report `ValueType::Integer`?” Read a stored alternative with `std::get<long long>(value.data())`; do not reach into `type_` or `data_` directly because they are private.
+
+The test order should mirror the implementation order:
+
+1. factory creates the expected type
+2. factory preserves the expected data
+3. text and boolean formatting works
+4. equal values compare equal
+5. different type or data compares unequal
+
+When a test fails, use the failure to choose the next function to inspect. The test is not a separate school exercise; it is the executable description of what the class promises to the table layer.
+
 ## Test-first exercise
 
 Before writing the definitions, add tests to `tests/value_tests.cpp` that prove:
