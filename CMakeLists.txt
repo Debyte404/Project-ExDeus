@@ -37,6 +37,7 @@ add_executable(exdeus_tests
     tests/lexer_tests.cpp
     tests/parser_tests.cpp
     tests/table_tests.cpp
+    tests/engine_tests.cpp
     tests/snapshot_tests.cpp
     tests/end_to_end_tests.cpp
 )
