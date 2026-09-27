@@ -66,20 +66,20 @@ bool has_terminator(const std::string& text) {
 
 void print_banner() {
     std::cout
-        << "\x1b[93m""   /\\                /\\   " "           " "\x1b[1;97m""E X D E U S   v0.1.0" "\x1b[0m""\n"
-        << "\x1b[93m""  /  \\    " "\x1b[90m""\xC2\xB7 \xE2\x94\x80 \xE2\x94\x80 \xC2\xB7" "\x1b[93m""    /  \\  " "          " "\x1b[90m""a tiny database engine, week 1" "\x1b[0m""\n"
-        << "\x1b[93m""  |  | " "\x1b[90m""\xE2\x95\xAD\xE2\x94\x80\xE2\x95\xAF     \xE2\x95\xB0\xE2\x94\x80\xE2\x95\xAE" "\x1b[93m"" |  |  " "            " "\x1b[0m""\n"
-        << "\x1b[93m""  |  |" "\x1b[90m""\xE2\x95\xAD\xE2\x95\xAF         \xE2\x95\xB0\xE2\x95\xAE" "\x1b[93m""|  |  " "            " "\x1b[1;97m""Engine    " "\x1b[0m""in-memory tables, snapshots" "\x1b[0m""\n"
-        << "\x1b[93m""   \\  \\ " "\x1b[97m""|   " "\x1b[91m""*" "\x1b[97m""   |" "\x1b[93m"" /  /   " "            " "\x1b[1;97m""Language  " "\x1b[0m""ExdeusQL: lexer -> parser" "\x1b[0m""\n"
-        << "\x1b[93m""    \\  |" "\x1b[97m"" |  " "\x1b[91m""* *" "\x1b[97m""  | " "\x1b[93m""|  /    " "          " "\x1b[1;97m""Book      " "\x1b[0m""docs/book, lessons 01-10" "\x1b[0m""\n"
-        << "\x1b[93m""     \\ |" "\x1b[97m"" | " "\x1b[31m""\xE2\x97\x8F" "\x1b[97m""     " "\x1b[31m""\xE2\x97\x8F" "\x1b[97m"" | " "\x1b[93m""| /     " "        " "\x1b[1;97m""REPL      " "\x1b[0m""`help` for commands, `quit`" "\x1b[0m""\n"
-        << "\x1b[93m""      \\|" "\x1b[97m"" |    " "\x1b[90m""\xE2\x94\x82" "\x1b[97m""    | " "\x1b[93m""|/      " "        " "\x1b[0m""\n"
-        << "\x1b[97m""       \\    \\ " "\x1b[90m""\xE2\x96\xB3" "\x1b[97m""  /    /       " "       " "\x1b[0m""\n"
-        << "\x1b[97m""        \\    \\ " "\x1b[90m""\xE2\x95\xB2\xE2\x95\xB1" "\x1b[97m"" /    /        " "     " "\x1b[0m""\n"
-        << "\x1b[97m""         |   \\ " "\x1b[90m""\xE2\x96\xB3" "\x1b[97m"" /   |         " "      " "\x1b[90m""Type `banner` to see this again." "\x1b[0m""\n"
-        << "\x1b[97m""         |     " "\x1b[90m""\xE2\x95\xB2\xE2\x95\xB1" "\x1b[97m""     |         " "     " "\x1b[0m""\n"
-        << "\x1b[97m""          \\     " "\x1b[90m""V" "\x1b[97m""     /          " "    " "\x1b[0m""\n"
-        << "\x1b[90m""            \xC2\xB7 \xE2\x94\x80 \xE2\x94\x80 \xC2\xB7           " "       " "\x1b[0m""\n"
+        << "\x1b[93m""   /\\                /\\     " "    " "   " "\x1b[1;97m""E X D E U S   v0.1.0" "\x1b[0m""\n"
+        << "\x1b[93m""  /  \\    " "\x1b[90m"". - - ." "\x1b[93m""    /  \\    " "   " "   " "\x1b[90m""a tiny database engine, week 1" "\x1b[0m""\n"
+        << "\x1b[93m""  |  | " "\x1b[90m"".-'       '-." "\x1b[93m"" |  |    " "   " "   " "\x1b[0m""\n"
+        << "\x1b[93m""  |  |" "\x1b[97m""               " "\x1b[93m""|  |    " "   " "   " "\x1b[1;97m""Engine    " "\x1b[0m""in-memory tables, snapshots" "\x1b[0m""\n"
+        << "\x1b[93m""   \\  \\ " "\x1b[97m""|   " "\x1b[91m""*" "\x1b[97m""   |" "\x1b[93m"" /  /     " "     " "   " "\x1b[1;97m""Language  " "\x1b[0m""ExdeusQL: lexer -> parser" "\x1b[0m""\n"
+        << "\x1b[93m""    \\  |" "\x1b[97m"" |  " "\x1b[91m""* *" "\x1b[97m""  | " "\x1b[93m""|  /      " "   " "   " "\x1b[1;97m""Book      " "\x1b[0m""docs/book, lessons 01-10" "\x1b[0m""\n"
+        << "\x1b[93m""     \\ |" "\x1b[97m"" | " "\x1b[31m""o" "\x1b[97m""     " "\x1b[31m""o" "\x1b[97m"" | " "\x1b[93m""| /       " " " "   " "\x1b[1;97m""REPL      " "\x1b[0m""`help` for commands, `quit`" "\x1b[0m""\n"
+        << "\x1b[93m""      \\|" "\x1b[97m"" |    " "\x1b[90m""|" "\x1b[97m""    | " "\x1b[93m""|/        " " " "   " "\x1b[0m""\n"
+        << "\x1b[97m""       \\  \\   " "\x1b[90m""^" "\x1b[97m""   /  /         " " " "   " "\x1b[0m""\n"
+        << "\x1b[97m""        \\  \\ " "\x1b[90m""\\_/" "\x1b[97m"" /  /          " " " "   " "\x1b[0m""\n"
+        << "\x1b[97m""         |  \\ " "\x1b[90m""^" "\x1b[97m"" /  |           " " " "   " "\x1b[90m""Type `banner` to see this again." "\x1b[0m""\n"
+        << "\x1b[97m""         |   " "\x1b[90m""V" "\x1b[97m""   |           " "   " "   " "\x1b[0m""\n"
+        << "\x1b[97m""          \\  " "\x1b[90m""|" "\x1b[97m""  /            " "   " "   " "\x1b[0m""\n"
+        << "\x1b[90m""            . - - .             " "" "   " "\x1b[0m""\n"
         << "\n";
 }
 
