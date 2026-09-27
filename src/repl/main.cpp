@@ -13,6 +13,29 @@
 
 namespace {
 
+// ANSI styles: pure decoration on output only, never on stored data.
+// Every styled print ends with RESET so a color can never leak into
+// the next line, a piped file, or the test runner's output.
+constexpr const char* RESET = "\x1b[0m";
+constexpr const char* BOLD = "\x1b[1m";
+constexpr const char* DIM = "\x1b[2m";
+constexpr const char* CYAN = "\x1b[36m";
+constexpr const char* BRIGHT_CYAN = "\x1b[96m";
+constexpr const char* GREEN = "\x1b[32m";
+constexpr const char* BRIGHT_GREEN = "\x1b[92m";
+constexpr const char* YELLOW = "\x1b[33m";
+constexpr const char* RED = "\x1b[31m";
+constexpr const char* BRIGHT_RED = "\x1b[91m";
+constexpr const char* MAGENTA = "\x1b[35m";
+
+void print_ok(const std::string& message) {
+    std::cout << GREEN << "+ " << RESET << message << "\n";
+}
+
+void print_error(const std::string& message) {
+    std::cout << BRIGHT_RED << "x Error: " << RESET << message << "\n";
+}
+
 using exdeus::language::Lexer;
 using exdeus::language::LexerError;
 using exdeus::language::Parser;
@@ -66,34 +89,26 @@ bool has_terminator(const std::string& text) {
 
 void print_banner() {
     std::cout
-        << "     " "\x1b[93m"",," "             " "\x1b[90m"",::;################;::," "             " "\x1b[93m"",," "\x1b[0m""\n"
-        << "     " "\x1b[93m"";+," "        " "\x1b[93m""::" "\x1b[90m""####;::,," "          " "\x1b[90m"",,::;####:" "\x1b[93m"":" "        " "\x1b[93m"",+;" "\x1b[0m""\n"
-        << "     " "\x1b[93m"":@+:," "   " "\x1b[93m"":;##;" "\x1b[97m"":," "                        " "\x1b[97m"",::" "\x1b[93m""##;:" "   " "\x1b[93m"",:+@:" "\x1b[0m""\n"
-        << "      " "\x1b[93m"":++;;::;;::," "                            " "\x1b[97m""," "\x1b[93m""::;;::;;++:" "\x1b[0m""\n"
-        << "       " "\x1b[93m"",#++##;::::" "\x1b[97m""::;::" "                  " "\x1b[97m"",:;:::" "\x1b[93m"":::;##++#," "\x1b[0m""\n"
-        << "      " "\x1b[93m"":+#,,:;####:" "\x1b[97m"":" "  " "\x1b[97m"",:;:" "              " "\x1b[97m"":;:," "  " "\x1b[97m""::" "\x1b[93m""####;:,,#+:" "\x1b[0m""\n"
-        << "    " "\x1b[93m"",#@;" "      " "\x1b[93m""#;;+" "\x1b[97m""@+:" " " "\x1b[97m""," " " "\x1b[97m"":#," "          " "\x1b[97m"",;:" " " "\x1b[97m""," " " "\x1b[97m"":+@+" "\x1b[93m"";;#" "      " "\x1b[93m"";@#," "\x1b[0m""\n"
-        << "   " "\x1b[93m"":@+," "       " "\x1b[93m"":@#:" "\x1b[97m"":@@+:" "\x1b[91m""," " " "\x1b[91m"";@:" "   " "\x1b[91m"",," "   " "\x1b[91m"":+;" " " "\x1b[91m"",:" "\x1b[97m""+@@::" "\x1b[93m""#@:" "       " "\x1b[93m"",+@:" "\x1b[0m""\n"
-        << "  " "\x1b[93m"":@#" "          " "\x1b[93m"":@:" " " "\x1b[97m"":@@#" "\x1b[91m""::+;#;;::::;;#;+::#" "\x1b[97m""@@:" " " "\x1b[97m"":" "\x1b[93m""@:" "          " "\x1b[93m""#@:" "\x1b[0m""\n"
-        << " " "\x1b[93m"":@+" "            " "\x1b[93m""#@" "\x1b[97m""," " " "\x1b[97m"";@@" "\x1b[91m"";#:,+#;," "  " "\x1b[91m"",:#+,:#;@" "\x1b[97m""@;" " " "\x1b[97m"",@" "\x1b[93m""#" "            " "\x1b[93m""#@:" "\x1b[0m""\n"
-        << " " "\x1b[93m""+@," "             " "\x1b[93m""+" "\x1b[97m""+" " " "\x1b[97m"",++" "\x1b[91m"";," "  " "\x1b[91m"":+,#;;#:#:" "  " "\x1b[91m"",;+" "\x1b[97m""+," " " "\x1b[97m""++" "             " "\x1b[93m"",@+" "\x1b[0m""\n"
-        << "\x1b[93m"":@;" "              " "\x1b[93m""," "\x1b[97m""@#" " " "\x1b[97m"":@" "\x1b[91m"":" "   " "\x1b[91m"",#;:," " " "\x1b[91m"":;#," "   " "\x1b[91m"":+" "\x1b[97m"":" " " "\x1b[97m""#@," "              " "\x1b[93m"";@:" "\x1b[0m""\n"
-        << "\x1b[93m""#@," "               " "\x1b[31m"":;;;:" " " "\x1b[31m"":" "\x1b[91m""###:+:,,:+:###" "\x1b[31m"":" " " "\x1b[31m"":;;;:" "               " "\x1b[93m"",@+" "\x1b[0m""\n"
-        << "\x1b[93m""++" "                 " "\x1b[31m"";+#:,:" "\x1b[97m"";;:::+::+:::;:" "\x1b[31m"":,:##;" "                 " "\x1b[93m""+@" "\x1b[0m""\n"
-        << "\x1b[97m""++" "               " "\x1b[31m"":;:+;@#" "  " "\x1b[97m""," "   " "\x1b[97m"":##:" "   " "\x1b[97m""," "  " "\x1b[31m""#@;#:;:" "               " "\x1b[97m""+@" "\x1b[0m""\n"
-        << "\x1b[97m""#@," "           " "\x1b[97m"":#" "\x1b[31m""+#:,+:++," "\x1b[97m""::," " " "\x1b[97m"",,##,," " " "\x1b[97m"",::" "\x1b[31m"",++:+,:#+" "\x1b[97m""#:" "           " "\x1b[97m"",@+" "\x1b[0m""\n"
-        << "\x1b[97m"":@;" "        " "\x1b[97m"":#+#:" "    " "\x1b[31m"":;;;:" "\x1b[97m"":::::" "    " "\x1b[97m"":::::" "\x1b[31m"":;;;:" "    " "\x1b[97m"":#+#:" "        " "\x1b[97m"";@:" "\x1b[0m""\n"
-        << " " "\x1b[97m""+@," "    " "\x1b[97m"":;##:" "          " "\x1b[31m""#+" "\x1b[97m"":,,:" "  " "\x1b[97m"",," "  " "\x1b[97m"":,,:" "\x1b[31m""##" "          " "\x1b[97m"":#+;:" "    " "\x1b[97m"",@+" "\x1b[0m""\n"
-        << " " "\x1b[97m"",@+" " " "\x1b[97m"",;+@@#;;;###;;;##::#," "  " "\x1b[97m""," "  " "\x1b[97m""::" "  " "\x1b[97m""," "  " "\x1b[97m"",#::##;;;###;;;#@@+;," " " "\x1b[97m""#@:" "\x1b[0m""\n"
-        << "  " "\x1b[97m"":@#,,," "  " "\x1b[97m"",,,,,,,,,,,,,:+" "   " "\x1b[97m""::" " " "\x1b[97m""::" " " "\x1b[97m""::" "   " "\x1b[97m""+:,,,,,,,,,,,,," "  " "\x1b[97m"",,,#@:" "\x1b[0m""\n"
-        << "   " "\x1b[97m"":@+," "                 " "\x1b[97m""#+:::;" " " "\x1b[97m""::" " " "\x1b[97m"";:::+#" "                 " "\x1b[97m"",+@:" "\x1b[0m""\n"
-        << "    " "\x1b[97m"",#@;" "                 " "\x1b[97m"";@:;@;;;;@;:@;" "                 " "\x1b[97m"";@#," "\x1b[0m""\n"
-        << "      " "\x1b[97m"":++:" "                " "\x1b[97m"":#:@@++@@:#:" "                " "\x1b[97m"":++:" "\x1b[0m""\n"
-        << "        " "\x1b[97m"":++;," "              " "\x1b[97m""#:#@;;@#:+" "              " "\x1b[97m"",;++:" "\x1b[0m""\n"
-        << "          " "\x1b[97m"":#+#:," "           " "\x1b[97m"":+,#::#,+:" "           " "\x1b[97m"",:#+#:" "\x1b[0m""\n"
-        << "             " "\x1b[90m"":#+#;:," "        " "\x1b[90m""#:,##,:#" "        " "\x1b[90m"",:;#+#:" "\x1b[0m""\n"
-        << "                " "\x1b[90m"",:####;:::," "  " "\x1b[90m""::::::" "  " "\x1b[90m"",,::;####:," "\x1b[0m""\n"
-        << "                    " "\x1b[90m"",::;####+###########;::," "\x1b[0m""\n"
+        << "    " "\x1b[93m"":" "         " "\x1b[90m"":::;;;;;;;;;;;;;;:::" "         " "\x1b[93m"":" "\x1b[0m""\n"
+        << "    " "\x1b[93m""+#," "   " "\x1b[93m"",:;;" "\x1b[90m""::,," "            " "\x1b[90m"",,::;" "\x1b[93m"";:," "   " "\x1b[93m"",#+" "\x1b[0m""\n"
+        << "    " "\x1b[93m"",##;::;;:," "                    " "\x1b[97m""," "\x1b[93m"":;;::;##," "\x1b[0m""\n"
+        << "     " "\x1b[93m"":#;##;:::" "\x1b[97m"",:::" "            " "\x1b[97m"":::,:" "\x1b[93m""::;##;#:" "\x1b[0m""\n"
+        << "   " "\x1b[93m"",##," "   " "\x1b[93m"":+#+" "\x1b[97m""#,,:::" "        " "\x1b[97m"":::,,#+" "\x1b[93m""#+:" "   " "\x1b[93m"",##," "\x1b[0m""\n"
+        << "  " "\x1b[93m"":@:" "      " "\x1b[93m""##," "\x1b[97m""#" "\x1b[91m""@#,:+:,,,,,,:+:,#@#" "\x1b[97m""," "\x1b[93m""#+" "      " "\x1b[93m"":@:" "\x1b[0m""\n"
+        << " " "\x1b[93m"":@:" "        " "\x1b[93m""@:" " " "\x1b[91m""+@;;:##:,,:##:;;@+" " " "\x1b[97m"":" "\x1b[93m""@" "        " "\x1b[93m"",@:" "\x1b[0m""\n"
+        << "\x1b[93m"",@:" "         " "\x1b[93m"",@" "\x1b[97m"":" "\x1b[91m"",@;," " " "\x1b[91m"":#::::;:" " " "\x1b[91m"",;@,:" "\x1b[97m""@" "\x1b[93m""," "         " "\x1b[93m"":@," "\x1b[0m""\n"
+        << "\x1b[93m""#+" "           " "\x1b[31m"":#,;:,:" "\x1b[91m"":;;," " " "\x1b[91m"";;::" "\x1b[31m"",:;,#:" "           " "\x1b[93m""##" "\x1b[0m""\n"
+        << "\x1b[93m""@:" "            " "\x1b[31m"":+;,:#" "\x1b[97m""::;::;::#" "\x1b[31m"":,;+:" "            " "\x1b[93m"":@" "\x1b[0m""\n"
+        << "\x1b[97m""@:" "         " "\x1b[31m"",:;:##+" " " "\x1b[31m""," "  " "\x1b[97m"",##," "  " "\x1b[97m""," " " "\x1b[31m""++#:;:," "         " "\x1b[97m"":@" "\x1b[0m""\n"
+        << "\x1b[97m""#+" "      " "\x1b[97m"",:;" "\x1b[31m"";:," " " "\x1b[31m"":;#::" "\x1b[97m"":,,,,,,::" "\x1b[31m"":#;;" "  " "\x1b[31m"":;;" "\x1b[97m"":," "      " "\x1b[97m""##" "\x1b[0m""\n"
+        << "\x1b[97m"",@:" "  " "\x1b[97m"",:##:," "     " "\x1b[31m"",;#:" "\x1b[97m"",:" "    " "\x1b[97m"",,:" "\x1b[31m""#;," "     " "\x1b[31m""," "\x1b[97m"":##:," "  " "\x1b[97m"":@," "\x1b[0m""\n"
+        << " " "\x1b[97m"":@:,;#;::::::::::;" "  " "\x1b[97m"":" " " "\x1b[97m""::" " " "\x1b[97m"":" "  " "\x1b[97m"";::::::::::;#;::@:" "\x1b[0m""\n"
+        << "  " "\x1b[97m"":@:" "             " "\x1b[97m""#:,;,::,;,:#" "             " "\x1b[97m"":@:" "\x1b[0m""\n"
+        << "   " "\x1b[97m"",##:" "           " "\x1b[97m"",#;;+;;+;;#," "           " "\x1b[97m"",##," "\x1b[0m""\n"
+        << "     " "\x1b[97m"":##:" "           " "\x1b[97m"";:@++@:;" "           " "\x1b[97m"":##:" "\x1b[0m""\n"
+        << "       " "\x1b[90m"":;#;:" "        " "\x1b[90m"":#:;;:#:" "        " "\x1b[90m"":;#;:" "\x1b[0m""\n"
+        << "          " "\x1b[90m""::;;::,," "   " "\x1b[90m""::;;::" "   " "\x1b[90m"",,::;;::" "\x1b[0m""\n"
+        << "              " "\x1b[90m"":::;;;;;;;;;;;;;;:::" "\x1b[0m""\n"
         "\x1b[0m""\n"
         << "\x1b[1;97m""E X D E U S   v0.1.0" "\x1b[0m""\n"
         << "\x1b[90m""a tiny database engine, week 1" "\x1b[0m""\n"
@@ -138,34 +153,41 @@ void print_table(const ResultTable& table) {
             widths[i] = std::max(widths[i], row[i].size());
         }
     }
-    auto print_row = [&](const std::vector<std::string>& cells) {
+    auto print_row = [&](const std::vector<std::string>& cells, bool header) {
         for (size_t i = 0; i < cells.size(); ++i) {
             if (i > 0) {
-                std::cout << " | ";
+                std::cout << DIM << " | " << RESET;
             }
-            std::cout << cells[i] << std::string(widths[i] - cells[i].size(), ' ');
+            if (header) {
+                std::cout << BRIGHT_CYAN << BOLD << cells[i] << RESET
+                          << std::string(widths[i] - cells[i].size(), ' ');
+            } else {
+                std::cout << cells[i] << std::string(widths[i] - cells[i].size(), ' ');
+            }
         }
         std::cout << "\n";
     };
     if (!rendered_heads.empty()) {
-        print_row(rendered_heads);
+        print_row(rendered_heads, true);
         for (size_t i = 0; i < rendered_heads.size(); ++i) {
             if (i > 0) {
-                std::cout << "-+-";
+                std::cout << DIM << "-+-" << RESET;
             }
-            std::cout << std::string(widths[i], '-');
+            std::cout << DIM << std::string(widths[i], '-') << RESET;
         }
         std::cout << "\n";
     }
     for (const auto& row : rendered_rows) {
-        print_row(row);
+        print_row(row, false);
     }
 }
 
 void print_result(const Result& result) {
-    std::cout << result.message << "\n";
     if (result.table.has_value()) {
+        std::cout << BRIGHT_GREEN << BOLD << result.message << RESET << "\n";
         print_table(*result.table);
+    } else {
+        print_ok(result.message);
     }
 }
 
@@ -177,7 +199,12 @@ int main() {
 
     std::string pending;
     while (true) {
-        std::cout << (pending.empty() ? "exdeus> " : "    ... ") << std::flush;
+        if (pending.empty()) {
+            std::cout << BRIGHT_RED << BOLD << "exdeus" << RESET << DIM << "> " << RESET
+                      << std::flush;
+        } else {
+            std::cout << DIM << "    ... " << RESET << std::flush;
+        }
         std::string line;
         if (!std::getline(std::cin, line)) {
             // EOF (Ctrl+Z / Ctrl+D): leave quietly on a fresh line.
@@ -219,15 +246,15 @@ int main() {
                 print_result(result);
             }
         } catch (const LexerError& e) {
-            std::cout << "Error: " << e.what() << "\n";
+            print_error(e.what());
         } catch (const ParserError& e) {
-            std::cout << "Error: " << e.what() << "\n";
+            print_error(e.what());
         } catch (const std::exception& e) {
             // Engine, table, interpreter, and catalog errors all land here:
             // the session survives and the next command runs clean.
-            std::cout << "Error: " << e.what() << "\n";
+            print_error(e.what());
         }
     }
-    std::cout << "Bye.\n";
+    std::cout << DIM << "Bye." << RESET << "\n";
     return 0;
 }
