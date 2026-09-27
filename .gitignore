@@ -4,3 +4,10 @@
 *.o
 *.pdb
 *.ilk
+
+# Local playground: private experiments, never pushed to GitHub.
+/playground/
+
+# Generated database outputs (running the example scripts creates these).
+*.exd
+*.csv
