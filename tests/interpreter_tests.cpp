@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -62,6 +63,22 @@ void check_not_ready(F&& run_fn, const char* message) {
     }
     std::cerr << "FAIL: " << message << " (no InterpreterError thrown)\n";
     std::exit(1);
+}
+
+int command_file_counter = 0;
+
+// Forward slashes keep Windows temp paths simple inside ExdeusQL string
+// literals (no escape decoding to think about).
+std::string temp_command_path(const std::string& stem, const std::string& ext) {
+    std::filesystem::path dir = std::filesystem::temp_directory_path() / "exdeus_cmd";
+    std::filesystem::create_directories(dir);
+    std::string path = (dir / (stem + "_" + std::to_string(++command_file_counter) + ext)).string();
+    for (char& c : path) {
+        if (c == '\\') {
+            c = '/';
+        }
+    }
+    return path;
 }
 
 void seed_bank(Interpreter& db) {
@@ -191,14 +208,35 @@ void run_interpreter_tests() {
               "the trailing seek sees the earlier add");
     }
 
-    // 6. Snapshots and export wait for Lesson 8; engine errors still surface.
+    // 6. Save/load/export run for real; engine errors still surface.
     {
         Interpreter db;
         seed_bank(db);
-        check_not_ready([&] { run(db, "save db to \"bank.exd\";"); }, "save waits for Lesson 8");
-        check_not_ready([&] { run(db, "load db from \"bank.exd\";"); }, "load waits for Lesson 8");
-        check_not_ready([&] { run(db, "export customers to \"customers.csv\";"); },
-                        "export waits for Lesson 8");
+        auto snap = temp_command_path("bank", ".exd");
+        Result saved = run(db, "save db to \"" + snap + "\";");
+        check(saved.message == "saved database bank to " + snap, "save reports db and path");
+        run(db, "remove customers where id equals 3;");
+        check(db.engine().row_count("customers") == 2, "remove shrinks before reload");
+        Result loaded = run(db, "load db from \"" + snap + "\";");
+        check(loaded.message == "loaded database bank from " + snap, "load reports db and path");
+        check(db.engine().row_count("customers") == 3, "load restores the removed row");
+
+        auto csv = temp_command_path("customers", ".csv");
+        Result exported = run(db, "export customers to \"" + csv + "\";");
+        check(exported.message == "exported table customers to " + csv,
+              "export reports table and path");
+        check(std::filesystem::exists(csv), "export writes the csv file");
+
+        check_fails([&] { run(db, "export missing to \"" + csv + "\";"); },
+                    "export of an unknown table fails");
+        check_fails([&] { run(db, "load db from \"no-such-file.exd\";"); },
+                    "load of a missing file fails");
+
+        Interpreter unharnessed;
+        check_fails([&] { run(unharnessed, "save db to \"" + snap + "\";"); },
+                    "save without a harness fails");
+        check_fails([&] { run(unharnessed, "forge table t with id: integer;"); },
+                    "forge without a harness fails");
 
         check_fails([&] { run(db, "seek missing;"); }, "seek of an unknown table fails");
         check_fails([&] { run(db, "seek customers where missing equals 1;"); },

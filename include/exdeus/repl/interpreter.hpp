@@ -12,7 +12,8 @@
 namespace exdeus::repl {
 
 // Named failure for command-vs-engine mismatches: unknown columns,
-// type errors, snapshot commands parked for Lesson 8.
+// type errors, and snapshot/export failures (surfaced as one type so the
+// REPL needs a single catch arm).
 class InterpreterError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
@@ -34,8 +35,8 @@ struct Result {
 
 // Interpreter executes parsed Command objects against an Engine.
 // It owns grammar-free execution only: no Lexer, no Parser inside.
-// SaveDb/LoadDb/ExportTable are accepted and parked with InterpreterError
-// until the Lesson-8 snapshot and CSV services exist.
+// SaveDb/LoadDb delegate to the snapshot store, ExportTable to the CSV
+// exporter; their errors surface as InterpreterError.
 class Interpreter {
 public:
     Interpreter() = default;
@@ -57,6 +58,9 @@ private:
     Result run_seek(const exdeus::language::SeekRows& command);
     Result run_change(const exdeus::language::ChangeRows& command);
     Result run_remove(const exdeus::language::RemoveRows& command);
+    Result run_save(const exdeus::language::SaveDb& command);
+    Result run_load(const exdeus::language::LoadDb& command);
+    Result run_export(const exdeus::language::ExportTable& command);
 
     exdeus::core::Engine engine_;
 };

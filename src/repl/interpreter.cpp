@@ -7,6 +7,9 @@
 #include <utility>
 #include <variant>
 
+#include "exdeus/io/csv_exporter.hpp"
+#include "exdeus/io/snapshot_store.hpp"
+
 namespace exdeus::repl {
 
 namespace {
@@ -110,11 +113,11 @@ Result Interpreter::execute(const exdeus::language::Command& command) {
             } else if constexpr (std::is_same_v<T, exdeus::language::RemoveRows>) {
                 return run_remove(active);
             } else if constexpr (std::is_same_v<T, exdeus::language::SaveDb>) {
-                throw InterpreterError("save db waits for the Lesson-8 snapshot store");
+                return run_save(active);
             } else if constexpr (std::is_same_v<T, exdeus::language::LoadDb>) {
-                throw InterpreterError("load db waits for the Lesson-8 snapshot store");
+                return run_load(active);
             } else if constexpr (std::is_same_v<T, exdeus::language::ExportTable>) {
-                throw InterpreterError("export waits for the Lesson-8 CSV exporter");
+                return run_export(active);
             }
         },
         command);
@@ -284,6 +287,39 @@ Result Interpreter::run_remove(const exdeus::language::RemoveRows& command) {
         engine_.remove(command.table, *it);
     }
     return Result{"removed " + plural(hits.size(), "row") + " from " + command.table, std::nullopt};
+}
+
+Result Interpreter::run_save(const exdeus::language::SaveDb& command) {
+    // Save the harnessed database: `save db` without a harness has no
+    // database to name, so it fails instead of guessing one.
+    if (!engine_.has_selection()) {
+        throw InterpreterError("no database selected: harness a database first");
+    }
+    try {
+        exdeus::io::SnapshotStore::save(engine_, engine_.selected_database(), command.path);
+    } catch (const std::exception& e) {
+        throw InterpreterError(e.what());
+    }
+    return Result{"saved database " + engine_.selected_database() + " to " + command.path,
+                  std::nullopt};
+}
+
+Result Interpreter::run_load(const exdeus::language::LoadDb& command) {
+    try {
+        std::string name = exdeus::io::SnapshotStore::load(engine_, command.path);
+        return Result{"loaded database " + name + " from " + command.path, std::nullopt};
+    } catch (const std::exception& e) {
+        throw InterpreterError(e.what());
+    }
+}
+
+Result Interpreter::run_export(const exdeus::language::ExportTable& command) {
+    try {
+        exdeus::io::CsvExporter::export_table(engine_, command.table, command.path);
+    } catch (const std::exception& e) {
+        throw InterpreterError(e.what());
+    }
+    return Result{"exported table " + command.table + " to " + command.path, std::nullopt};
 }
 
 }  // namespace exdeus::repl

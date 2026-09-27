@@ -73,8 +73,8 @@ void print_help() {
               << "  seek <t> [show a, b] [where a above 1] [order by a];\n"
               << "  change <t> set a to 2 [where ...];\n"
               << "  remove <t> [where ...];\n"
-              << "  save db to \"f.exd\";  load db from \"f.exd\";   (Lesson 8)\n"
-              << "  export <t> to \"f.csv\";            (Lesson 8)\n"
+              << "  save db to \"f.exd\";  load db from \"f.exd\";   save/load a snapshot\n"
+              << "  export <t> to \"f.csv\";            export a table as CSV\n"
               << "REPL commands: help, quit\n";
 }
 
