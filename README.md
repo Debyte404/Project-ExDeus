@@ -19,8 +19,26 @@ The production C++ implementation is yours to write. The project scaffolding and
 
 ```powershell
 cmake -S . -B build
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --build build --config Debug
+ctest --test-dir build -C Debug --output-on-failure
 ```
 
-At the first checkpoint, the executable is only a project bootstrap. The database behavior arrives through the following lessons.
+## Try it
+
+```powershell
+Get-Content examples/bank.exql | .\build\Debug\exdeus.exe
+Get-Content examples/college.exql | .\build\Debug\exdeus.exe
+```
+
+Two scripted databases (bank, college) run through the interactive REPL:
+create, harness, forge, add, seek, change, remove, save, export. Inspect
+`bank.exd` and `customers.csv` afterwards — both are readable text.
+
+## Week-1 scope
+
+The prototype promises typed values, explicit database selection, full
+row lifecycle, filtered/projected/ordered queries, atomic snapshots,
+CSV export, and a REPL that survives every command error. It does not
+promise crash recovery, concurrency, transactions, or SQL compatibility —
+see `docs/book/10-testing-and-week1-checkpoint.md` for the honest
+inventory and the measurements to collect before week 2.

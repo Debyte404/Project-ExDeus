@@ -7,6 +7,7 @@ void run_lexer_tests();
 void run_parser_tests();
 void run_interpreter_tests();
 void run_snapshot_tests();
+void run_end_to_end_tests();
 
 int main() {
     std::cout << "Exdeus tests: running registered suites.\n";
@@ -17,5 +18,6 @@ int main() {
     run_parser_tests();
     run_interpreter_tests();
     run_snapshot_tests();
+    run_end_to_end_tests();
     return 0;
 }

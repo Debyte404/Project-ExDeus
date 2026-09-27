@@ -1,0 +1,56 @@
+-- ExdeusQL starter bank: customers, accounts, and transactions.
+-- Run it with:  Get-Content examples/bank.exql | .\build\Debug\exdeus.exe
+-- Every command ends with `;`; blocks may span lines.
+
+create db bank;
+harness bank;
+
+forge table customers with
+  id: integer unique,
+  name: text,
+  account_type: text,
+  balance: decimal,
+  active: boolean;
+
+add customers (1, "Asha", "savings", 25000.50, true);
+add customers (2, "Ravi", "current", 12000.00, true);
+add customers (3, "Mira", "savings", 8000.25, false);
+
+forge table accounts with
+  id: integer unique,
+  customer_id: integer,
+  number: text,
+  opened: text;
+
+add accounts (101, 1, "SAV-1001", "2026-01-15");
+add accounts (102, 2, "CUR-2001", "2026-02-20");
+add accounts (103, 3, "SAV-1003", "2026-03-05");
+
+forge table transactions with
+  id: integer unique,
+  account_id: integer,
+  kind: text,
+  amount: decimal;
+
+add transactions (1001, 101, "deposit", 5000.00);
+add transactions (1002, 101, "withdrawal", 1200.00);
+add transactions (1003, 102, "deposit", 2500.00);
+
+-- Who holds savings above 10000, richest first.
+seek customers
+  show name, balance
+  where account_type equals "savings" and balance above 10000
+  order by balance descending;
+
+-- Savings interest: every savings balance grows by 500.
+change customers
+  set balance to balance plus 500
+  where account_type equals "savings";
+
+-- Close Mira's row, then show what remains.
+remove customers where name equals "Mira";
+seek customers show name, balance order by balance descending;
+
+-- Persist the result and prove the export path.
+save db to "bank.exd";
+export customers to "customers.csv";
