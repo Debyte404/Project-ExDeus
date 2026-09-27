@@ -64,6 +64,21 @@ bool has_terminator(const std::string& text) {
     return false;
 }
 
+void print_banner() {
+    std::cout
+        << "        ________                E X D E U S   v0.1.0\n"
+        << "      .'        '.              a tiny database engine,\n"
+        << "     /   EXDEUS   \\             built lesson by lesson\n"
+        << "     |------------|             \n"
+        << "     |  in-memory |             Engine    in-memory tables, snapshots\n"
+        << "     |------------|             Language  ExdeusQL: lexer -> parser\n"
+        << "     |   week 1   |             Book      docs/book, lessons 01-10\n"
+        << "     |------------|             REPL      `help` for commands, `quit`\n"
+        << "      '.        .'              \n"
+        << "        '------'                \n"
+        << "--------------------------------------------------------------------\n";
+}
+
 void print_help() {
     std::cout << "ExdeusQL commands (end every command with `;`):\n"
               << "  create db <name>;                 create a database\n"
@@ -75,7 +90,7 @@ void print_help() {
               << "  remove <t> [where ...];\n"
               << "  save db to \"f.exd\";  load db from \"f.exd\";   save/load a snapshot\n"
               << "  export <t> to \"f.csv\";            export a table as CSV\n"
-              << "REPL commands: help, quit\n";
+              << "REPL commands: help, banner, quit\n";
 }
 
 void print_table(const ResultTable& table) {
@@ -132,7 +147,7 @@ void print_result(const Result& result) {
 
 int main() {
     Interpreter db;
-    std::cout << "Exdeus REPL. Type `help` for commands, `quit` to leave.\n";
+    print_banner();
 
     std::string pending;
     while (true) {
@@ -156,6 +171,10 @@ int main() {
         }
         if (pending.empty() && (word == "help" || word == "help;")) {
             print_help();
+            continue;
+        }
+        if (pending.empty() && (word == "banner" || word == "banner;")) {
+            print_banner();
             continue;
         }
         if (!pending.empty()) {
