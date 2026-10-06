@@ -24,7 +24,9 @@ public:
 //   harness <name>;
 //   forge table <name> with <col>: <type> [unique], ... ;
 //   add <table> (<lit>, ...);
-//   seek <table> [show <col>, ...] [where <cond> (and|or <cond>)*]
+//   seek <table> [show <col>, ... | show *]
+//                [inner join <table> on <q.col> equals <q.col>]
+//                [where <cond> (and|or <cond>)*]
 //                [order by <col> [ascending|descending]];
 //   change <table> set <col> to <expr>, ... [where ...];
 //   remove <table> [where ...];   ("remove <t> where ..." deletes rows;
@@ -53,6 +55,8 @@ private:
     std::string expect_name(const std::string& what);
     exdeus::core::Value expect_literal(const std::string& what);
     std::string expect_string(const std::string& what);
+    // A column reference: bare (`balance`) or table-qualified (`customers.id`).
+    std::string expect_column(const std::string& what);
 
     Command parse_command();
     CreateDb parse_create();
@@ -67,6 +71,7 @@ private:
     ExportTable parse_export();
 
     Projection parse_projection();
+    std::optional<JoinClause> parse_join();
     std::vector<Condition> parse_conditions();
     Condition parse_condition();
     std::vector<Assignment> parse_assignments();

@@ -31,6 +31,8 @@ const std::unordered_map<std::string, TokenKind>& keywords() {
         {"required", TokenKind::KwRequired},
         {"integer", TokenKind::KwInteger}, {"decimal", TokenKind::KwDecimal},
         {"text", TokenKind::KwText},       {"boolean", TokenKind::KwBoolean},
+        {"inner", TokenKind::KwInner},     {"join", TokenKind::KwJoin},
+        {"on", TokenKind::KwOn},
         {"true", TokenKind::BoolLit},      {"false", TokenKind::BoolLit},
     };
     return table;
@@ -84,6 +86,9 @@ const char* to_string(TokenKind kind) {
         case TokenKind::KwDecimal: return "decimal";
         case TokenKind::KwText: return "text";
         case TokenKind::KwBoolean: return "boolean";
+        case TokenKind::KwInner: return "inner";
+        case TokenKind::KwJoin: return "join";
+        case TokenKind::KwOn: return "on";
         case TokenKind::IntegerLit: return "integer literal";
         case TokenKind::DecimalLit: return "decimal literal";
         case TokenKind::StringLit: return "string literal";
@@ -92,6 +97,8 @@ const char* to_string(TokenKind kind) {
         case TokenKind::Semicolon: return ";";
         case TokenKind::Comma: return ",";
         case TokenKind::Colon: return ":";
+        case TokenKind::Dot: return ".";
+        case TokenKind::Star: return "*";
         case TokenKind::LParen: return "(";
         case TokenKind::RParen: return ")";
         case TokenKind::LBrace: return "{";
@@ -266,6 +273,8 @@ std::vector<Token> Lexer::tokenize() {
             case ';': tokens_.push_back(make_token(TokenKind::Semicolon, ";", start)); break;
             case ',': tokens_.push_back(make_token(TokenKind::Comma, ",", start)); break;
             case ':': tokens_.push_back(make_token(TokenKind::Colon, ":", start)); break;
+            case '.': tokens_.push_back(make_token(TokenKind::Dot, ".", start)); break;
+            case '*': tokens_.push_back(make_token(TokenKind::Star, "*", start)); break;
             case '(': tokens_.push_back(make_token(TokenKind::LParen, "(", start)); break;
             case ')': tokens_.push_back(make_token(TokenKind::RParen, ")", start)); break;
             case '{': tokens_.push_back(make_token(TokenKind::LBrace, "{", start)); break;

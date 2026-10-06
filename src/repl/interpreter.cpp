@@ -2,6 +2,7 @@
 #include "exdeus/repl/interpreter.hpp"
 
 #include <algorithm>
+#include <map>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -66,22 +67,67 @@ bool eval_condition(const Value& cell, const Condition& condition) {
     throw InterpreterError("unknown filter operator");
 }
 
+// Build a column-resolution map: bare name -> index, qualified name
+// (table.column) -> index. In a JOIN, bare names prefer the left table
+// and only map if the right table does not already claim them.
+std::map<std::string, size_t> build_columns(
+    const std::string& left_table, const Schema& left_schema,
+    const std::string* right_table, const Schema* right_schema) {
+    std::map<std::string, size_t> columns;
+    size_t next_index = 0;
+    for (const Column& c : left_schema.columns()) {
+        columns[c.name] = next_index;
+        columns[left_table + "." + c.name] = next_index;
+        ++next_index;
+    }
+    if (right_schema) {
+        for (const Column& c : right_schema->columns()) {
+            if (columns.find(c.name) == columns.end()) {
+                columns[c.name] = next_index;
+            }
+            columns[*right_table + "." + c.name] = next_index;
+            ++next_index;
+        }
+    }
+    return columns;
+}
+
+size_t resolve_column(const std::map<std::string, size_t>& columns, const std::string& ref) {
+    auto it = columns.find(ref);
+    if (it == columns.end()) {
+        throw InterpreterError("unknown column: " + ref);
+    }
+    return it->second;
+}
+
+// Evaluate one condition against a row through the column map.
+// Supports literal comparisons and column-to-column equality.
+bool eval_on_row(const Row& row, const std::map<std::string, size_t>& columns,
+                 const Condition& condition) {
+    size_t idx = resolve_column(columns, condition.column);
+    if (condition.right_is_column) {
+        return values_equal(row[idx], row[resolve_column(columns, condition.right_column)]);
+    }
+    return eval_condition(row[idx], condition);
+}
+
 // Left-associative and/or fold: conditions[i].and_with_next joins
 // conditions[i] to conditions[i + 1]. Empty means no filter: match all.
-bool row_matches(const Row& row, const Schema& schema, const std::vector<Condition>& where) {
+bool row_matches(const Row& row, const std::map<std::string, size_t>& columns,
+                 const std::vector<Condition>& where) {
     if (where.empty()) {
         return true;
     }
-    bool result = eval_condition(row[schema.index_of(where[0].column)], where[0]);
+    bool result = eval_on_row(row, columns, where[0]);
     for (size_t i = 0; i + 1 < where.size(); ++i) {
-        bool next = eval_condition(row[schema.index_of(where[i + 1].column)], where[i + 1]);
+        bool next = eval_on_row(row, columns, where[i + 1]);
         result = where[i].and_with_next ? (result && next) : (result || next);
     }
     return result;
 }
 
 std::string plural(size_t count, const char* word) {
-    return std::to_string(count) + (count == 1 ? " " : " ") + word + (count == 1 ? "" : "s");
+    return std::to_string(count) + " " + word + (count == 1 ? "" : "s");
 }
 
 }  // namespace
@@ -157,40 +203,95 @@ Result Interpreter::run_add(const exdeus::language::AddRow& command) {
 }
 
 Result Interpreter::run_seek(const exdeus::language::SeekRows& command) {
-    const Table& table = engine_.table(command.table);
-    const Schema& schema = table.schema();
+    const Table& left_table = engine_.table(command.table);
+    const Schema& left_schema = left_table.schema();
 
-    // Projection: empty `show` means every column in schema order.
-    // Unknown projection or ordering columns fail before touching rows.
-    std::vector<std::string> shown = command.show;
-    if (shown.empty()) {
-        for (const Column& column : schema.columns()) {
-            shown.push_back(column.name);
-        }
-    }
-    for (const std::string& name : shown) {
-        if (!schema.has_column(name)) {
-            throw InterpreterError("unknown column: " + name);
-        }
-    }
-    if (!command.order_by.empty() && !schema.has_column(command.order_by)) {
-        throw InterpreterError("unknown column: " + command.order_by);
+    const Table* right_table = nullptr;
+    const Schema* right_schema = nullptr;
+    if (command.join) {
+        right_table = &engine_.table(command.join->table);
+        right_schema = &right_table->schema();
     }
 
-    std::vector<size_t> hits;
-    for (size_t i = 0; i < table.row_count(); ++i) {
-        if (row_matches(table.row_at(i), schema, command.where)) {
-            hits.push_back(i);
+    // Column map resolves bare and qualified names into composite-row indexes.
+    std::map<std::string, size_t> columns =
+        build_columns(command.table, left_schema,
+                      command.join ? &command.join->table : nullptr, right_schema);
+
+    // Validate projection and ordering columns before touching rows.
+    std::vector<std::string> display_names;
+    std::vector<size_t> display_indexes;
+    if (command.show.empty()) {
+        // `show *` or no show: every column, schema order.
+        // Qualified when joined so `id` vs `id` stays unambiguous.
+        if (right_schema) {
+            for (const Column& c : left_schema.columns()) {
+                std::string ref = command.table + "." + c.name;
+                display_names.push_back(ref);
+                display_indexes.push_back(resolve_column(columns, ref));
+            }
+            for (const Column& c : right_schema->columns()) {
+                std::string ref = command.join->table + "." + c.name;
+                display_names.push_back(ref);
+                display_indexes.push_back(resolve_column(columns, ref));
+            }
+        } else {
+            for (const Column& c : left_schema.columns()) {
+                display_names.push_back(c.name);
+                display_indexes.push_back(resolve_column(columns, c.name));
+            }
+        }
+    } else {
+        for (const std::string& ref : command.show) {
+            display_names.push_back(ref);
+            display_indexes.push_back(resolve_column(columns, ref));
+        }
+    }
+    size_t order_key = 0;
+    bool has_order = !command.order_by.empty() &&
+                     command.direction != exdeus::language::SortDirection::None;
+    if (has_order) {
+        order_key = resolve_column(columns, command.order_by);
+    }
+
+    // Generate candidates: single rows, or composite (left x right) rows.
+    std::vector<Row> candidates;
+    if (!right_table) {
+        for (size_t i = 0; i < left_table.row_count(); ++i) {
+            candidates.push_back(left_table.row_at(i));
+        }
+    } else {
+        for (size_t l = 0; l < left_table.row_count(); ++l) {
+            for (size_t r = 0; r < right_table->row_count(); ++r) {
+                Row composite = left_table.row_at(l);
+                composite.insert(composite.end(), right_table->row_at(r).begin(),
+                                 right_table->row_at(r).end());
+                candidates.push_back(std::move(composite));
+            }
         }
     }
 
-    if (!command.order_by.empty() &&
-        command.direction != exdeus::language::SortDirection::None) {
-        size_t key = schema.index_of(command.order_by);
+    // Filter: the join key is just another condition, evaluated first.
+    std::vector<Row> matched;
+    for (Row& row : candidates) {
+        if (command.join) {
+            size_t l_idx = resolve_column(columns, command.join->left);
+            size_t r_idx = resolve_column(columns, command.join->right);
+            if (!values_equal(row[l_idx], row[r_idx])) {
+                continue;
+            }
+        }
+        if (!row_matches(row, columns, command.where)) {
+            continue;
+        }
+        matched.push_back(std::move(row));
+    }
+
+    if (has_order) {
         bool ascending = command.direction == exdeus::language::SortDirection::Ascending;
-        std::stable_sort(hits.begin(), hits.end(), [&](size_t a, size_t b) {
-            const Value& left = table.row_at(a)[key];
-            const Value& right = table.row_at(b)[key];
+        std::stable_sort(matched.begin(), matched.end(), [&](const Row& a, const Row& b) {
+            const Value& left = a[order_key];
+            const Value& right = b[order_key];
             if (is_number(left) && is_number(right)) {
                 return ascending ? as_double(left) < as_double(right)
                                  : as_double(left) > as_double(right);
@@ -204,40 +305,46 @@ Result Interpreter::run_seek(const exdeus::language::SeekRows& command) {
     }
 
     ResultTable answer;
-    answer.columns = shown;
-    for (size_t index : hits) {
-        const Row& row = table.row_at(index);
+    answer.columns = display_names;
+    for (Row& row : matched) {
         std::vector<Value> projected;
-        for (const std::string& name : shown) {
-            projected.push_back(row[schema.index_of(name)]);
+        for (size_t idx : display_indexes) {
+            projected.push_back(std::move(row[idx]));
         }
         answer.rows.push_back(std::move(projected));
     }
-    return Result{"seek " + command.table + ": " + plural(hits.size(), "row"), std::move(answer)};
+
+    std::string label = command.table;
+    if (command.join) {
+        label += " join " + command.join->table;
+    }
+    return Result{"seek " + label + ": " + plural(answer.rows.size(), "row"),
+                  std::move(answer)};
 }
 
 Result Interpreter::run_change(const exdeus::language::ChangeRows& command) {
     const Table& table = engine_.table(command.table);
     const Schema& schema = table.schema();
+    std::map<std::string, size_t> columns =
+        build_columns(command.table, schema, nullptr, nullptr);
 
     // Validate every named column up front so a bad `set` changes nothing.
     for (const Assignment& item : command.set) {
-        if (!schema.has_column(item.column)) {
-            throw InterpreterError("unknown column: " + item.column);
-        }
-        if (item.is_arithmetic && !schema.has_column(item.source_column)) {
-            throw InterpreterError("unknown column: " + item.source_column);
+        resolve_column(columns, item.column);
+        if (item.is_arithmetic) {
+            resolve_column(columns, item.source_column);
         }
     }
     for (const Condition& condition : command.where) {
-        if (!schema.has_column(condition.column)) {
-            throw InterpreterError("unknown column: " + condition.column);
+        resolve_column(columns, condition.column);
+        if (condition.right_is_column) {
+            resolve_column(columns, condition.right_column);
         }
     }
 
     std::vector<size_t> hits;
     for (size_t i = 0; i < table.row_count(); ++i) {
-        if (row_matches(table.row_at(i), schema, command.where)) {
+        if (row_matches(table.row_at(i), columns, command.where)) {
             hits.push_back(i);
         }
     }
@@ -245,12 +352,12 @@ Result Interpreter::run_change(const exdeus::language::ChangeRows& command) {
     for (size_t index : hits) {
         Row rewritten = engine_.row_at(command.table, index);
         for (const Assignment& item : command.set) {
-            size_t target = schema.index_of(item.column);
+            size_t target = resolve_column(columns, item.column);
             if (!item.is_arithmetic) {
                 rewritten[target] = item.value;
                 continue;
             }
-            const Value& source = rewritten[schema.index_of(item.source_column)];
+            const Value& source = rewritten[resolve_column(columns, item.source_column)];
             if (!is_number(source) || !is_number(item.value)) {
                 throw InterpreterError("plus/minus needs numeric values for column: " +
                                        item.column);
@@ -270,15 +377,18 @@ Result Interpreter::run_change(const exdeus::language::ChangeRows& command) {
 Result Interpreter::run_remove(const exdeus::language::RemoveRows& command) {
     const Table& table = engine_.table(command.table);
     const Schema& schema = table.schema();
+    std::map<std::string, size_t> columns =
+        build_columns(command.table, schema, nullptr, nullptr);
     for (const Condition& condition : command.where) {
-        if (!schema.has_column(condition.column)) {
-            throw InterpreterError("unknown column: " + condition.column);
+        resolve_column(columns, condition.column);
+        if (condition.right_is_column) {
+            resolve_column(columns, condition.right_column);
         }
     }
 
     std::vector<size_t> hits;
     for (size_t i = 0; i < table.row_count(); ++i) {
-        if (row_matches(table.row_at(i), schema, command.where)) {
+        if (row_matches(table.row_at(i), columns, command.where)) {
             hits.push_back(i);
         }
     }

@@ -148,5 +148,25 @@ void run_lexer_tests() {
         check(bang, "lone ! throws LexerError");
     }
 
+    // 7. Star, dot, and join keywords lex correctly.
+    {
+        auto tokens = lex("seek customers show *;");
+        check(at(tokens, 3).kind == TokenKind::Star, "star lexes as Star");
+        check(at(tokens, 3).lexeme == "*", "star lexeme is asterisk");
+
+        auto dotted = lex("customers.id equals accounts.customer_id");
+        check(at(dotted, 0).kind == TokenKind::Identifier, "first part of dotted name is identifier");
+        check(at(dotted, 1).kind == TokenKind::Dot, "dot lexes as Dot");
+        check(at(dotted, 2).kind == TokenKind::Identifier, "second part of dotted name is identifier");
+
+        auto join_tokens = lex("inner join accounts on customers.id equals accounts.customer_id");
+        check(at(join_tokens, 0).kind == TokenKind::KwInner, "inner lexes as keyword");
+        check(at(join_tokens, 1).kind == TokenKind::KwJoin, "join lexes as keyword");
+        check(at(join_tokens, 3).kind == TokenKind::KwOn, "on lexes as keyword");
+
+        auto short_join = lex("join t2 on a.x equals b.y");
+        check(at(short_join, 0).kind == TokenKind::KwJoin, "join works without inner");
+    }
+
     std::cout << "All lexer tests passed.\n";
 }

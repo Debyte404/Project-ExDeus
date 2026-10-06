@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -22,11 +23,15 @@ enum class FilterOp {
     Below,   // below / <
 };
 
-// One `where` condition: `<column> <op> <literal>`, chained with and/or.
+// One `where` condition. Compares a column against a literal
+// (`balance above 10000`) or against another column in a JOIN
+// (`customers.id equals accounts.customer_id`).
 struct Condition {
-    std::string column;
+    std::string column;         // left side: bare or table-qualified
     FilterOp op;
-    exdeus::core::Value literal;
+    bool right_is_column = false;
+    std::string right_column;   // only when right_is_column
+    exdeus::core::Value literal;  // only when !right_is_column
     // How this condition joins to the NEXT one. Ignored on the last.
     // True = `and`, false = `or`.
     bool and_with_next = true;
@@ -42,7 +47,7 @@ struct Assignment {
     exdeus::core::Value value;  // literal, or the arithmetic operand
 };
 
-// `show a, b` projection. Empty = all columns.
+// `show a, b` projection. Empty = all columns, and so does a lone `*`.
 using Projection = std::vector<std::string>;
 
 enum class SortDirection {
@@ -72,9 +77,18 @@ struct AddRow {
     std::vector<exdeus::core::Value> values;
 };
 
+// Inner equi-join: `inner join <table> on <left> equals <right>`.
+// Column sides must be qualified (`customers.id`); only Equals is allowed.
+struct JoinClause {
+    std::string table;
+    std::string left;
+    std::string right;
+};
+
 struct SeekRows {
     std::string table;
     Projection show;
+    std::optional<JoinClause> join;
     std::vector<Condition> where;
     std::string order_by;
     SortDirection direction = SortDirection::None;

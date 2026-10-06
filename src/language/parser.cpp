@@ -68,6 +68,16 @@ std::string Parser::expect_name(const std::string& what) {
     return expect(TokenKind::Identifier, what).lexeme;
 }
 
+std::string Parser::expect_column(const std::string& what) {
+    std::string first = expect_name(what);
+    if (match(TokenKind::Dot)) {
+        // Table-qualified: `customers.id`.
+        std::string column = expect_name("a column name after '.'");
+        return first + "." + column;
+    }
+    return first;
+}
+
 exdeus::core::Value Parser::expect_literal(const std::string& what) {
     const Token& token = peek();
     switch (token.kind) {
@@ -194,7 +204,13 @@ AddRow Parser::parse_add() {
 
 SeekRows Parser::parse_seek() {
     expect(TokenKind::KwSeek, "'seek'");
-    SeekRows command{expect_name("a table name"), {}, {}, "", SortDirection::None};
+    SeekRows command{expect_name("a table name"), {}, std::nullopt, {}, "", SortDirection::None};
+    // `show` can appear before or after the join clause.
+    if (check(TokenKind::KwShow)) {
+        advance();
+        command.show = parse_projection();
+    }
+    command.join = parse_join();
     if (check(TokenKind::KwShow)) {
         advance();
         command.show = parse_projection();
@@ -206,7 +222,7 @@ SeekRows Parser::parse_seek() {
     if (check(TokenKind::KwOrder)) {
         advance();
         expect(TokenKind::KwBy, "'by'");
-        command.order_by = expect_name("a column name");
+        command.order_by = expect_column("a column name");
         if (check(TokenKind::KwAscending)) {
             advance();
             command.direction = SortDirection::Ascending;
@@ -219,11 +235,47 @@ SeekRows Parser::parse_seek() {
 }
 
 Projection Parser::parse_projection() {
-    Projection columns{expect_name("a column name")};
+    // `show *` must stand alone — no mixing with named columns.
+    if (check(TokenKind::Star)) {
+        advance();
+        return {};  // empty projection = all columns
+    }
+    Projection columns{expect_column("a column name")};
     while (match(TokenKind::Comma)) {
-        columns.push_back(expect_name("a column name"));
+        columns.push_back(expect_column("a column name"));
     }
     return columns;
+}
+
+std::optional<JoinClause> Parser::parse_join() {
+    // `inner` is optional: `join` alone means the same thing.
+    match(TokenKind::KwInner);
+    if (!check(TokenKind::KwJoin)) {
+        return std::nullopt;
+    }
+    advance();  // consume 'join'
+    JoinClause clause{expect_name("a table name"), "", ""};
+    expect(TokenKind::KwOn, "'on'");
+    clause.left = expect_column("a qualified column (e.g. customers.id)");
+    if (clause.left.find('.') == std::string::npos) {
+        fail(tokens_[cursor_ - 1],
+             "a qualified column (e.g. customers.id) — bare names are ambiguous in joins");
+    }
+    switch (peek().kind) {
+        case TokenKind::KwEquals:
+        case TokenKind::Equal:
+        case TokenKind::Assign:
+            advance();
+            break;
+        default:
+            fail(peek(), "'equals' (or '==' / '=')");
+    }
+    clause.right = expect_column("a qualified column (e.g. accounts.customer_id)");
+    if (clause.right.find('.') == std::string::npos) {
+        fail(tokens_[cursor_ - 1],
+             "a qualified column (e.g. accounts.customer_id) — bare names are ambiguous in joins");
+    }
+    return clause;
 }
 
 std::vector<Condition> Parser::parse_conditions() {
@@ -238,7 +290,8 @@ std::vector<Condition> Parser::parse_conditions() {
 }
 
 Condition Parser::parse_condition() {
-    Condition condition{expect_name("a column name"), FilterOp::Equals, exdeus::core::Value::boolean(false), true};
+    Condition condition{expect_column("a column name"), FilterOp::Equals, false, "",
+                        exdeus::core::Value::boolean(false), true};
     const Token& op = peek();
     switch (op.kind) {
         case TokenKind::KwEquals:
@@ -258,6 +311,17 @@ Condition Parser::parse_condition() {
             fail(op, "a comparison (equals, above, below, =, ==, >, <)");
     }
     advance();
+    // Column-to-column comparison (used in JOIN queries and available
+    // everywhere): `where balance equals credit_limit`. Only Equals is
+    // meaningful — above/below on two columns would need a planner.
+    if (check(TokenKind::Identifier)) {
+        condition.right_is_column = true;
+        condition.right_column = expect_column("a column name");
+        if (condition.op != FilterOp::Equals) {
+            fail(op, "'equals' when comparing two columns");
+        }
+        return condition;
+    }
     condition.literal = expect_literal("a comparison value");
     return condition;
 }

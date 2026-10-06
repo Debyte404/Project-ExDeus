@@ -53,6 +53,9 @@ enum class TokenKind {
     KwDecimal,
     KwText,
     KwBoolean,
+    KwInner,
+    KwJoin,
+    KwOn,
     // Literals.
     IntegerLit,
     DecimalLit,
@@ -63,6 +66,8 @@ enum class TokenKind {
     Semicolon,
     Comma,
     Colon,
+    Dot,         // . (qualified names: customers.id)
+    Star,        // * (show-all projection)
     LParen,
     RParen,
     LBrace,

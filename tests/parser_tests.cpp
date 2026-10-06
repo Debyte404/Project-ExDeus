@@ -195,5 +195,55 @@ void run_parser_tests() {
         check(positioned, "parser errors carry line and column");
     }
 
+    // 8. show * parses to an empty projection (all columns).
+    {
+        const auto& star = as<SeekRows>(parse_one("seek customers show *;"), "show * parses");
+        check(star.show.empty(), "show * stores an empty projection");
+
+        const auto& bare = as<SeekRows>(parse_one("seek customers;"), "bare seek still works");
+        check(bare.show.empty() && !bare.join.has_value(), "bare seek has no join either");
+    }
+
+    // 9. inner join ... on parses the JoinClause.
+    {
+        const auto& join = as<SeekRows>(
+            parse_one("seek customers inner join accounts on customers.id equals accounts.customer_id;"),
+            "inner join parses");
+        check(join.join.has_value(), "join clause is present");
+        check(join.join->table == "accounts", "join keeps the right table name");
+        check(join.join->left == "customers.id", "join left side is qualified");
+        check(join.join->right == "accounts.customer_id", "join right side is qualified");
+
+        const auto& short_join = as<SeekRows>(
+            parse_one("seek customers join accounts on customers.id equals accounts.customer_id;"),
+            "join without inner parses");
+        check(short_join.join.has_value(), "bare join also produces a clause");
+
+        check_throws([] { parse_one("seek customers inner join accounts on customers.id above accounts.customer_id;"); },
+                     "join on non-equals operator fails");
+        check_throws([] { parse_one("seek customers inner join accounts on id equals customer_id;"); },
+                     "join on bare column fails");
+    }
+
+    // 10. Qualified columns and column-to-column conditions parse everywhere.
+    {
+        const auto& seek = as<SeekRows>(
+            parse_one("seek customers show customers.name, customers.balance where customers.id equals 1 order by customers.balance descending;"),
+            "qualified columns parse in seek");
+        check(seek.show.size() == 2 && seek.show[0] == "customers.name",
+              "qualified show keeps the prefix");
+        check(seek.where[0].column == "customers.id", "qualified where column keeps the prefix");
+        check(seek.order_by == "customers.balance", "qualified order by keeps the prefix");
+
+        const auto& col_cmp = as<SeekRows>(
+            parse_one("seek accounts where balance equals limit;"),
+            "column-to-column condition parses");
+        check(col_cmp.where[0].right_is_column, "column-to-column sets the flag");
+        check(col_cmp.where[0].right_column == "limit", "right column keeps its name");
+
+        check_throws([] { parse_one("seek accounts where balance above limit;"); },
+                     "column-to-column with above fails");
+    }
+
     std::cout << "All parser tests passed.\n";
 }

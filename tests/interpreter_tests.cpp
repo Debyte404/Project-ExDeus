@@ -251,5 +251,87 @@ void run_interpreter_tests() {
                     "forge without a harness fails");
     }
 
+    // 7. show * expands to all columns; qualified names work everywhere.
+    {
+        Interpreter db;
+        seed_bank(db);
+        Result star = run(db, "seek customers show *;");
+        check(star.table->columns.size() == 3, "show * returns all three columns");
+        check(star.table->columns[0] == "id" && star.table->columns[1] == "name" &&
+                  star.table->columns[2] == "balance",
+              "show * keeps schema order");
+
+        Result qualified = run(db, "seek customers show customers.name where customers.id equals 1;");
+        check(qualified.table->columns[0] == "customers.name",
+              "qualified show keeps the prefix");
+        check(qualified.table->rows.size() == 1 &&
+                  qualified.table->rows[0][0] == Value::text("Asha"),
+              "qualified filter resolves correctly");
+
+        check_fails([&] { run(db, "seek customers show missing;"); },
+                    "show on an unknown column fails");
+    }
+
+    // 8. inner join combines two tables on a qualified key.
+    {
+        Interpreter db;
+        run_script(db,
+                   "create db bank; harness bank;"
+                   "forge table customers with id: integer unique, name: text, balance: decimal;"
+                   "add customers (1, \"Asha\", 25000.50);"
+                   "add customers (2, \"Ravi\", 12000.00);"
+                   "add customers (3, \"Mira\", 8000.25);"
+                   "forge table accounts with id: integer unique, customer_id: integer, number: text;"
+                   "add accounts (101, 1, \"SAV-1001\");"
+                   "add accounts (102, 2, \"CUR-2001\");"
+                   "add accounts (103, 3, \"SAV-1003\");"
+                   "add accounts (104, 1, \"SAV-1002\");");
+
+        Result joined = run(db,
+                            "seek customers inner join accounts on customers.id equals accounts.customer_id;");
+        check(joined.table.has_value(), "join returns a table");
+        check(joined.table->columns.size() == 6,
+              "join show * returns all six columns (3 + 3)");
+        check(joined.table->columns[0] == "customers.id" &&
+                  joined.table->columns[3] == "accounts.id",
+              "join columns are qualified");
+        // Asha has two accounts (101, 104); Ravi one (102); Mira one (103).
+        check(joined.table->rows.size() == 4, "join produces four matched rows");
+
+        Result filtered = run(db,
+                              "seek customers inner join accounts on customers.id equals accounts.customer_id "
+                              "show customers.name, accounts.number where customers.name equals \"Asha\";");
+        check(filtered.table->rows.size() == 2, "join + where keeps only Asha's accounts");
+        check(filtered.table->rows[0][1] == Value::text("SAV-1001") &&
+                  filtered.table->rows[1][1] == Value::text("SAV-1002"),
+              "joined rows carry the right account numbers");
+
+        Result ordered = run(db,
+                             "seek customers inner join accounts on customers.id equals accounts.customer_id "
+                             "show accounts.number order by accounts.number descending;");
+        check(ordered.table->rows[0][0] == Value::text("SAV-1003"),
+              "join orders by a right-table column");
+
+        check_fails([&] { run(db, "seek customers inner join missing on customers.id equals missing.customer_id;"); },
+                    "join to an unknown table fails");
+        check_fails([&] { run(db, "seek customers inner join accounts on customers.nope equals accounts.customer_id;"); },
+                    "join on an unknown column fails");
+    }
+
+    // 9. Column-to-column comparison works outside joins too.
+    {
+        Interpreter db;
+        run_script(db,
+                   "create db shop; harness shop;"
+                   "forge table items with id: integer unique, price: decimal, limit: decimal;"
+                   "add items (1, 100.0, 100.0);"
+                   "add items (2, 200.0, 150.0);");
+        Result eq = run(db, "seek items where price equals limit;");
+        check(eq.table->rows.size() == 1 && eq.table->rows[0][0] == Value::integer(1),
+              "column-to-column equals finds matching rows");
+        check_fails([&] { run(db, "seek items where price above limit;"); },
+                    "column-to-column with above fails");
+    }
+
     std::cout << "All interpreter tests passed.\n";
 }
