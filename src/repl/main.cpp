@@ -3,8 +3,12 @@
 // the human-readable result, and stays alive after any command error.
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "exdeus/language/lexer.hpp"
@@ -12,6 +16,9 @@
 #include "exdeus/repl/interpreter.hpp"
 
 namespace {
+
+using exdeus::language::Command;
+using exdeus::language::TokenKind;
 
 // ANSI styles: pure decoration on output only, never on stored data.
 // Every styled print ends with RESET so a color can never leak into
@@ -126,33 +133,50 @@ void print_banner() {
 }
 
 void print_help() {
-    // One color per job so the eye can scan: examples YELLOW, notes DIM,
-    // comments MAGENTA (nothing else uses it), REPL verbs BRIGHT_CYAN.
-    std::cout << BOLD << "ExdeusQL" << RESET << " commands (end every command with "
-              << BOLD << ";" << RESET << "):\n"
+    // One color per job so the eye can scan: YELLOW examples, DIM notes,
+    // MAGENTA comments (nothing else uses it), BRIGHT_CYAN REPL verbs.
+    // Groups with a blank line between them; `;` ends every command.
+    std::cout << BOLD << "ExdeusQL" << RESET << " - groups, examples, notes:\n"
+              << "\n"
+              << BOLD << "  databases" << RESET << "\n"
               << "  " << YELLOW << "create db <name>;" << RESET
-              << "                 create a database\n"
+              << "          make a database (does not select it)\n"
               << "  " << YELLOW << "harness <name>;" << RESET
-              << "                   select a database\n"
+              << "              pick one for the commands below\n"
+              << "\n"
+              << BOLD << "  tables & rows" << RESET << "\n"
               << "  " << YELLOW << "forge table <t> with id: integer beelzebub, n: text not null;" << RESET << "\n"
-              << "    " << DIM << "beelzebub = primary key (one per table); also: unique, null (nullable)," << RESET << "\n"
+              << "    " << DIM << "beelzebub = primary key (one per table); also unique, null," << RESET << "\n"
               << "    " << DIM << "check above 0, references parent(col)" << RESET << "\n"
               << "  " << YELLOW << "add <t> (1, \"Asha\");" << RESET
-              << "             insert a row\n"
-              << "  " << YELLOW << "seek <t> [show * | show a, b] [inner join <t2> on <t1.a> equals <t2.b>]" << RESET << "\n"
+              << "      insert one row\n"
+              << "  " << YELLOW << "change <t> set a to 2 [where ...];" << RESET
+              << "  change rows\n"
+              << "  " << YELLOW << "remove <t> [where ...];" << RESET
+              << "         delete rows\n"
+              << "\n"
+              << BOLD << "  queries" << RESET << "\n"
+              << "  " << YELLOW << "seek <t> [show * | show a, b]" << RESET << "\n"
+              << "          " << YELLOW << "[inner join <t2> on <t1.a> equals <t2.b>]" << RESET << "\n"
               << "          " << YELLOW << "[where a above 1] [order by a];" << RESET << "\n"
-              << "  " << YELLOW << "change <t> set a to 2 [where ...];" << RESET << "\n"
-              << "  " << YELLOW << "remove <t> [where ...];" << RESET << "\n"
-              << "  " << YELLOW << "save db to \"f.exd\";" << RESET << "  "
-              << YELLOW << "load db from \"f.exd\";" << RESET << "   save/load a snapshot\n"
-              << "    " << DIM << "paths are relative to where you launched exdeus; reply shows the full path" << RESET << "\n"
-              << "    " << DIM << "use forward slashes (\"dir/f.exd\") - \\n and \\t are string escapes" << RESET << "\n"
-              << "  " << YELLOW << "export <t> to \"f.csv\";" << RESET
-              << "            export a table as CSV\n"
+              << "\n"
+              << BOLD << "  files" << RESET << "\n"
+              << "  " << YELLOW << "save db to \"bank.exd\";" << RESET
+              << "    snapshot the harnessed database\n"
+              << "  " << YELLOW << "load db from \"bank.exd\";" << RESET
+              << "    restore it (try it right now)\n"
+              << "  " << YELLOW << "export <t> to \"t.csv\";" << RESET
+              << "         dump one table as CSV\n"
+              << "  " << YELLOW << "run \"examples/bank.exql\";" << RESET
+              << "  execute a script file, line by line\n"
+              << "    " << DIM << "paths are relative to launch dir; replies show the full path" << RESET << "\n"
+              << "    " << DIM << "forward slashes (\"dir/f.exd\") - \\n and \\t are string escapes" << RESET << "\n"
+              << "\n"
               << "  " << MAGENTA << "# like this, or -- like this" << RESET
-              << "        comments (both run to end of line)\n"
-              << "REPL commands: " << BRIGHT_CYAN << "help" << RESET << ", "
-              << BRIGHT_CYAN << "banner" << RESET << ", "
+              << "  comments, both run to end of line\n"
+              << "\n"
+              << "  REPL: " << BRIGHT_CYAN << "help" << RESET << "  "
+              << BRIGHT_CYAN << "banner" << RESET << "  "
               << BRIGHT_CYAN << "quit" << RESET << "\n";
 }
 
@@ -213,6 +237,91 @@ void print_result(const Result& result) {
     }
 }
 
+// Runs an .exql script file: every command executes in order through the
+// same Lexer -> Parser -> Interpreter path as typed input, each result
+// printed as it runs. One bad command prints its error and the script
+// continues; the session always survives. Paths follow the save/load rule:
+// relative to the launch directory, backslashes normalized, and the reply
+// names the absolute location.
+void run_script_file(Interpreter& db, const std::string& raw_path) {
+    std::string path = raw_path;
+    for (char& c : path) {
+        if (c == '\\') {
+            c = '/';
+        }
+    }
+    std::error_code ec;
+    std::string abs =
+        std::filesystem::absolute(std::filesystem::path(path), ec).generic_string();
+    if (ec) {
+        abs = path;
+    }
+    std::ifstream in(std::filesystem::path(path), std::ios::binary);
+    if (!in.is_open()) {
+        print_error("cannot open script file '" + abs + "'");
+        return;
+    }
+    std::ostringstream text;
+    text << in.rdbuf();
+    if (in.bad()) {
+        print_error("cannot read script file '" + abs + "'");
+        return;
+    }
+    try {
+        Lexer lexer(text.str());
+        Parser parser(lexer.tokenize());
+        std::vector<Command> commands = parser.parse_all();
+        for (const Command& command : commands) {
+            try {
+                print_result(db.execute(command));
+            } catch (const std::exception& e) {
+                print_error(e.what());
+            }
+        }
+        print_ok("ran " + std::to_string(commands.size()) + " commands from " + abs);
+    } catch (const LexerError& e) {
+        print_error(e.what());
+    } catch (const ParserError& e) {
+        print_error(e.what());
+    } catch (const std::exception& e) {
+        print_error(e.what());
+    }
+}
+
+// True when `source` is a `run "<path>";` (or `source`) line, in which case
+// it executes the script file and the caller skips the normal path.
+// Shape-checked on real lexer tokens, so spacing, case, and escapes all
+// behave exactly like every other command.
+bool try_run_file(Interpreter& db, const std::string& source) {
+    std::vector<exdeus::language::Token> tokens;
+    try {
+        Lexer lexer(source);
+        tokens = lexer.tokenize();
+    } catch (const LexerError&) {
+        return false;  // not a run line; the normal path reports the error
+    }
+    // run "<path>" ; <end> — exactly four tokens.
+    if (tokens.size() != 4) {
+        return false;
+    }
+    if (tokens[0].kind != TokenKind::Identifier) {
+        return false;
+    }
+    std::string verb = lower(tokens[0].lexeme);
+    if (verb != "run" && verb != "source") {
+        return false;
+    }
+    if (tokens[1].kind != TokenKind::StringLit) {
+        print_error("run needs a quoted path: run \"examples/bank.exql\";");
+        return true;
+    }
+    if (tokens[2].kind != TokenKind::Semicolon) {
+        return false;
+    }
+    run_script_file(db, std::get<std::string>(tokens[1].literal->data()));
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -261,6 +370,9 @@ int main() {
         }
         std::string source = std::move(pending);
         pending.clear();
+        if (try_run_file(db, source)) {
+            continue;  // script file handled (or its usage error printed)
+        }
         try {
             Lexer lexer(source);
             Parser parser(lexer.tokenize());
