@@ -34,6 +34,12 @@ Two scripted databases (bank, college) run through the interactive REPL:
 create, harness, forge, add, seek, change, remove, save, export. Inspect
 `bank.exd` and `customers.csv` afterwards — both are readable text.
 
+Paths in `save db`, `load db`, and `export` are relative to the directory
+you launch `exdeus` from, and every reply echoes the absolute location so
+you always know where the file went. Use forward slashes in ExdeusQL paths
+(`"snapshots/bank.exd"`): backslash-n and backslash-t are string escapes,
+so Windows-style `"\new\temp"` paths need forward slashes.
+
 ## Week-1 scope
 
 The prototype promises typed values, explicit database selection, full

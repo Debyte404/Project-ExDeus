@@ -427,5 +427,47 @@ void run_interpreter_tests() {
         check(db.engine().row_count("teams") == 0, "parent deletes after referencing child goes");
     }
 
+    // 15. Relative paths resolve against the process cwd; messages echo the
+    // absolute location; backslashes normalize to forward slashes.
+    {
+        Interpreter db;
+        run_script(db, "create db rel; harness rel;"
+                       "forge table t with id: integer beelzebub, name: text;"
+                       "add t (1, \"Pwd\");");
+        // Forward-slash relative save: subdir auto-created under the cwd.
+        Result saved = run(db, "save db to \"exd_rel_check/r1.exd\";");
+        std::string abs_dir =
+            std::filesystem::absolute("exd_rel_check").generic_string();
+        check(saved.message == "saved database rel to " + abs_dir + "/r1.exd",
+              "save message echoes the absolute location");
+        check(std::filesystem::exists("exd_rel_check/r1.exd"),
+              "relative save lands under the cwd");
+
+        // Backslash save: doubled in source, single after lexing, normalized on disk.
+        Result saved_bs = run(db, "save db to \"exd_rel_check\\\\r2.exd\";");
+        check(saved_bs.message == "saved database rel to " + abs_dir + "/r2.exd",
+              "backslash save normalizes and echoes absolute");
+        check(std::filesystem::exists("exd_rel_check/r2.exd"),
+              "backslash save lands in the same subdir");
+
+        // Load the database back from a relative path in this cwd.
+        Interpreter fresh;
+        Result loaded = run(fresh, "load db from \"exd_rel_check/r1.exd\";");
+        check(loaded.message == "loaded database rel from " + abs_dir + "/r1.exd",
+              "load message echoes the absolute location");
+        check(fresh.engine().row_count("t") == 1, "relative load restores the row");
+
+        // Export to a relative path too.
+        Result exported = run(fresh, "export t to \"exd_rel_check/t.csv\";");
+        check(exported.message == "exported table t to " + abs_dir + "/t.csv",
+              "export message echoes the absolute location");
+        check(std::filesystem::exists("exd_rel_check/t.csv"),
+              "relative export lands under the cwd");
+
+        std::error_code ec;
+        std::filesystem::remove_all("exd_rel_check", ec);
+        check(!ec, "relative test dir cleans up");
+    }
+
     std::cout << "All interpreter tests passed.\n";
 }

@@ -169,6 +169,16 @@ void run_lexer_tests() {
         check(at(short_join, 0).kind == TokenKind::KwJoin, "join works without inner");
     }
 
+    // 9. Unknown escapes keep the backslash (Windows paths survive the lexer).
+    {
+        auto kept = lex("\"a\\qb\"");
+        check(at(kept, 0).kind == TokenKind::StringLit, "unknown escape stays a string");
+        check(at(kept, 0).lexeme == "a\\qb", "unknown escape keeps its backslash");
+
+        auto win = lex("\"dir\\file.exd\"");
+        check(at(win, 0).lexeme == "dir\\file.exd", "single backslash path survives lexing");
+    }
+
     // 8. Constraint keywords lex correctly.
     {
         auto tokens = lex("beelzebub not null check references");

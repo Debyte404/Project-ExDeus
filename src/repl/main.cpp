@@ -138,6 +138,8 @@ void print_help() {
               << "  change <t> set a to 2 [where ...];\n"
               << "  remove <t> [where ...];\n"
               << "  save db to \"f.exd\";  load db from \"f.exd\";   save/load a snapshot\n"
+              << "    paths are relative to where you launched exdeus; reply shows the full path\n"
+              << "    use forward slashes (\"dir/f.exd\") — \\n and \\t are string escapes\n"
               << "  export <t> to \"f.csv\";            export a table as CSV\n"
               << "REPL commands: help, banner, quit\n";
 }

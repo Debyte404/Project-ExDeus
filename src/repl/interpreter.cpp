@@ -2,6 +2,7 @@
 #include "exdeus/repl/interpreter.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <map>
 #include <string>
 #include <type_traits>
@@ -131,6 +132,35 @@ bool row_matches(const Row& row, const std::map<std::string, size_t>& columns,
 
 std::string plural(size_t count, const char* word) {
     return std::to_string(count) + " " + word + (count == 1 ? "" : "s");
+}
+
+// File paths arrive from ExdeusQL string literals. On Windows users type
+// backslashes (`snapshots\bank.exd`), so normalize them to forward slashes
+// before touching the filesystem — backslash is not a valid filename
+// character on Windows, so this never renames a real file. Note: `\n` and
+// `\t` are decoded as escapes by the lexer before we see them, so paths
+// containing those sequences still need forward slashes (see help text).
+std::string normalize_separators(const std::string& path) {
+    std::string out = path;
+    for (char& c : out) {
+        if (c == '\\') {
+            c = '/';
+        }
+    }
+    return out;
+}
+
+// Absolute location for result messages, so the user always sees WHERE the
+// file went regardless of the process working directory. generic_string
+// keeps forward slashes on every platform.
+std::string display_path(const std::string& path) {
+    std::error_code ec;
+    std::string abs =
+        std::filesystem::absolute(std::filesystem::path(path), ec).generic_string();
+    if (ec) {
+        return path;
+    }
+    return abs;
 }
 
 }  // namespace
@@ -434,18 +464,22 @@ Result Interpreter::run_save(const exdeus::language::SaveDb& command) {
         throw InterpreterError("no database selected: harness a database first");
     }
     try {
-        exdeus::io::SnapshotStore::save(engine_, engine_.selected_database(), command.path);
+        std::string disk_path = normalize_separators(command.path);
+        exdeus::io::SnapshotStore::save(engine_, engine_.selected_database(), disk_path);
+        return Result{"saved database " + engine_.selected_database() + " to " +
+                          display_path(disk_path),
+                      std::nullopt};
     } catch (const std::exception& e) {
         throw InterpreterError(e.what());
     }
-    return Result{"saved database " + engine_.selected_database() + " to " + command.path,
-                  std::nullopt};
 }
 
 Result Interpreter::run_load(const exdeus::language::LoadDb& command) {
     try {
-        std::string name = exdeus::io::SnapshotStore::load(engine_, command.path);
-        return Result{"loaded database " + name + " from " + command.path, std::nullopt};
+        std::string disk_path = normalize_separators(command.path);
+        std::string name = exdeus::io::SnapshotStore::load(engine_, disk_path);
+        return Result{"loaded database " + name + " from " + display_path(disk_path),
+                      std::nullopt};
     } catch (const std::exception& e) {
         throw InterpreterError(e.what());
     }
@@ -453,11 +487,13 @@ Result Interpreter::run_load(const exdeus::language::LoadDb& command) {
 
 Result Interpreter::run_export(const exdeus::language::ExportTable& command) {
     try {
-        exdeus::io::CsvExporter::export_table(engine_, command.table, command.path);
+        std::string disk_path = normalize_separators(command.path);
+        exdeus::io::CsvExporter::export_table(engine_, command.table, disk_path);
+        return Result{"exported table " + command.table + " to " + display_path(disk_path),
+                      std::nullopt};
     } catch (const std::exception& e) {
         throw InterpreterError(e.what());
     }
-    return Result{"exported table " + command.table + " to " + command.path, std::nullopt};
 }
 
 }  // namespace exdeus::repl

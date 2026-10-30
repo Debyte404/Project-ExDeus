@@ -194,7 +194,10 @@ void Lexer::scan_string() {
                 case 't': value.push_back('\t'); break;
                 case '"': value.push_back('"'); break;
                 case '\\': value.push_back('\\'); break;
-                default: value.push_back(esc); break;
+                // Unknown escapes keep the backslash (`\b` stays two chars).
+                // Dropping it silently renamed Windows paths (`a\b` -> `ab`),
+                // sending files somewhere the user never typed.
+                default: value.push_back('\\'); value.push_back(esc); break;
             }
         } else {
             value.push_back(c);
