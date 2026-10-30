@@ -49,6 +49,10 @@ enum class TokenKind {
     KwMinus,
     KwUnique,
     KwRequired,
+    KwBeelzebub,
+    KwNot,
+    KwCheck,
+    KwReferences,
     KwInteger,
     KwDecimal,
     KwText,
@@ -61,6 +65,7 @@ enum class TokenKind {
     DecimalLit,
     StringLit,
     BoolLit,
+    NullLit,
     Identifier,
     // Punctuation.
     Semicolon,

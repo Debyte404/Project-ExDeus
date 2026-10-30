@@ -333,5 +333,99 @@ void run_interpreter_tests() {
                     "column-to-column with above fails");
     }
 
+    // 10. beelzebub primary key: unique, required, single per table.
+    {
+        Interpreter db;
+        run_script(db, "create db shop; harness shop;"
+                       "forge table items with id: integer beelzebub, name: text not null;");
+        run(db, "add items (1, \"Hammer\");");
+        check_fails([&] { run(db, "add items (1, \"Nails\");"); },
+                    "duplicate beelzebub rejected");
+        check_fails([&] { run(db, "add items (null, \"Ghost\");"); },
+                    "null beelzebub rejected");
+        check_fails([&] {
+            run(db, "forge table bad with a: integer beelzebub, b: integer beelzebub;");
+        }, "second beelzebub in one table rejected");
+        check_fails([&] { run(db, "add items (2, null);"); },
+                    "null into not null name rejected");
+        Result hit = run(db, "seek items where id equals 1;");
+        check(hit.table->rows.size() == 1, "beelzebub row is retrievable");
+    }
+
+    // 11. Nullable columns accept nulls; unique lets nulls repeat.
+    {
+        Interpreter db;
+        run_script(db, "create db shop; harness shop;"
+                       "forge table members with id: integer beelzebub, nickname: text null, code: integer unique null;");
+        run(db, "add members (1, null, null);");
+        run(db, "add members (2, null, null);");
+        check(db.engine().row_count("members") == 2, "two null nicknames coexist");
+        Result found = run(db, "seek members where nickname equals null;");
+        check(found.table->rows.size() == 2, "null equals null matches");
+        check_fails([&] { run(db, "add members (null, \"x\", 5);"); },
+                    "null primary rejected even when other nulls exist");
+    }
+
+    // 12. CHECK constraints reject bad values on insert and update.
+    {
+        Interpreter db;
+        run_script(db, "create db bank; harness bank;"
+                       "forge table accounts with id: integer beelzebub, balance: decimal not null check above 0 and below 1000000;");
+        run(db, "add accounts (1, 500.0);");
+        check_fails([&] { run(db, "add accounts (2, 0.0);"); },
+                    "zero balance violates above 0");
+        check_fails([&] { run(db, "add accounts (2, 2000000.0);"); },
+                    "huge balance violates below 1000000");
+        check_fails([&] { run(db, "change accounts set balance to 0.0 where id equals 1;"); },
+                    "update to violating value rejected");
+        Result kept = run(db, "seek accounts where id equals 1;");
+        check(kept.table->rows[0][1] == Value::decimal(500.0),
+              "failed update keeps the old balance");
+    }
+
+    // 13. FOREIGN KEY: insert needs a live parent; parent delete/update restricted.
+    {
+        Interpreter db;
+        run_script(db, "create db bank; harness bank;"
+                       "forge table customers with id: integer beelzebub, name: text not null;"
+                       "forge table accounts with id: integer beelzebub, customer_id: integer not null references customers(id), number: text;"
+                       "add customers (1, \"Asha\");"
+                       "add customers (2, \"Ravi\");"
+                       "add accounts (101, 1, \"SAV-1001\");");
+        check_fails([&] { run(db, "add accounts (102, 99, \"ORPHAN\");"); },
+                    "orphan child rejected");
+        check_fails([&] { run(db, "remove customers where id equals 1;"); },
+                    "parent delete restricted while referenced");
+        run(db, "remove accounts where id equals 101;");
+        run(db, "remove customers where id equals 1;");
+        check(db.engine().row_count("customers") == 1, "parent deletes after child goes");
+        run_script(db, "add customers (3, \"Mira\"); add accounts (103, 3, \"SAV-1003\");");
+        check_fails([&] { run(db, "change customers set id to 30 where id equals 3;"); },
+                    "parent key update restricted while referenced");
+        check_fails([&] { run(db, "change accounts set customer_id to 99 where id equals 103;"); },
+                    "child update to orphan rejected");
+        check_fails([&] { db.engine().drop_table("customers"); },
+                    "drop of referenced parent rejected");
+    }
+
+    // 14. Nullable FK: null means no parent, always allowed.
+    {
+        Interpreter db;
+        run_script(db, "create db hr; harness hr;"
+                       "forge table teams with id: integer beelzebub, name: text;"
+                       "forge table staff with id: integer beelzebub, team_id: integer null references teams(id), name: text;"
+                       "add teams (1, \"Core\");"
+                       "add staff (10, null, \"Solo\");"
+                       "add staff (11, 1, \"Joined\");");
+        check(db.engine().row_count("staff") == 2, "null-FK row and live-FK row coexist");
+        check_fails([&] { run(db, "add staff (12, 99, \"Lost\");"); },
+                    "non-null dangling FK still rejected");
+        check_fails([&] { run(db, "remove teams where id equals 1;"); },
+                    "referenced parent restricted even with a null-FK sibling");
+        run(db, "remove staff where id equals 11;");
+        run(db, "remove teams where id equals 1;");
+        check(db.engine().row_count("teams") == 0, "parent deletes after referencing child goes");
+    }
+
     std::cout << "All interpreter tests passed.\n";
 }

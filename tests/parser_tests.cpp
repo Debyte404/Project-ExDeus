@@ -88,6 +88,57 @@ void run_parser_tests() {
         check(forge.columns[3].type == ValueType::Boolean, "active is boolean");
     }
 
+    // 2b. forge parses beelzebub, not null, null, check, and references.
+    {
+        const auto& pk = as<ForgeTable>(
+            parse_one("forge table t with id: integer beelzebub;"), "beelzebub parses");
+        check(pk.columns[0].is_primary, "beelzebub sets primary");
+        check(pk.columns[0].unique, "beelzebub implies unique");
+        check(pk.columns[0].required_flag, "beelzebub implies required");
+
+        const auto& nn = as<ForgeTable>(
+            parse_one("forge table t with name: text not null;"), "not null parses");
+        check(nn.columns[0].required_flag, "not null stays required");
+
+        const auto& nul = as<ForgeTable>(
+            parse_one("forge table t with nickname: text null;"), "bare null parses");
+        check(!nul.columns[0].required_flag, "bare null makes nullable");
+
+        const auto& chk = as<ForgeTable>(
+            parse_one("forge table t with balance: decimal check above 0 and below 1000000;"),
+            "check with and parses");
+        check(chk.columns[0].checks.size() == 2, "both checks are kept");
+        check(chk.columns[0].checks[0].op == FilterOp::Above, "first check is above");
+        check(chk.columns[0].checks[0].literal == Value::integer(0), "check bound is 0");
+        check(chk.columns[0].checks[1].op == FilterOp::Below, "second check is below");
+
+        const auto& fk = as<ForgeTable>(
+            parse_one("forge table a with customer_id: integer references customers(id);"),
+            "references parses");
+        check(fk.columns[0].references.has_value(), "references is present");
+        check(fk.columns[0].references->table == "customers", "references keeps parent table");
+        check(fk.columns[0].references->column == "id", "references keeps parent column");
+
+        const auto& combo = as<ForgeTable>(
+            parse_one("forge table a with id: integer beelzebub, bal: decimal not null check above 0, cid: integer references customers(id);"),
+            "combined constraints parse");
+        check(combo.columns.size() == 3, "all three columns kept");
+        check(combo.columns[1].required_flag && combo.columns[1].checks.size() == 1,
+              "not null plus check coexist");
+
+        const auto& two_pk = as<ForgeTable>(
+            parse_one("forge table t with a: integer beelzebub, b: integer beelzebub;"),
+            "two beelzebubs parse");
+        check(two_pk.columns[0].is_primary && two_pk.columns[1].is_primary,
+              "both columns carry primary (Schema rejects this at forge time)");
+        check_throws([] { parse_one("forge table t with a: integer not null null;"); },
+                     "not null plus null fails");
+        check_throws([] { parse_one("forge table t with a: integer check;"); },
+                     "dangling check fails");
+        check_throws([] { parse_one("forge table t with a: integer references customers;"); },
+                     "references without parens fails");
+    }
+
     // 3. add parses typed row values in order.
     {
         const auto& add = as<AddRow>(

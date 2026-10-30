@@ -110,7 +110,7 @@ void run_snapshot_tests() {
         auto path = temp_path("bank", ".exd");
         SnapshotStore::save(engine, "bank", path);
         std::string text = read_file(path);
-        check(text.rfind("EXDEUS_SNAPSHOT 1\n", 0) == 0, "snapshot starts with the version header");
+        check(text.rfind("EXDEUS_SNAPSHOT 2\n", 0) == 0, "snapshot starts with the version header");
         check(text.find("database bank\n") != std::string::npos, "snapshot names the database");
         check(text.find("O\\\"Neil") != std::string::npos, "snapshot escapes the quote");
 
@@ -203,6 +203,63 @@ void run_snapshot_tests() {
                 }
             },
             "csv export of an unknown table fails");
+    }
+
+    // 5. Constraints and nulls survive the round trip; v1 files still load.
+    {
+        Engine engine;
+        engine.create_database("shop");
+        engine.harness_database("shop");
+        engine.create_table("teams", Schema({
+            Column{"id", ValueType::Integer, true, true, true, {}, std::nullopt},
+            Column{"name", ValueType::Text, true, false, false, {}, std::nullopt},
+        }));
+        engine.create_table("staff", Schema({
+            Column{"id", ValueType::Integer, true, true, true, {}, std::nullopt},
+            Column{"team_id", ValueType::Integer, false, false, false, {},
+                   exdeus::core::ForeignRef{"teams", "id"}},
+            Column{"pay", ValueType::Decimal, true, false, false,
+                   {exdeus::core::CheckConstraint{exdeus::core::CheckOp::Above,
+                                                  Value::integer(0)}},
+                   std::nullopt},
+        }));
+        engine.insert("teams", {Value::integer(1), Value::text("Core")});
+        engine.insert("staff", {Value::integer(10), Value::null(), Value::decimal(500.0)});
+
+        auto path = temp_path("constraints", ".exd");
+        SnapshotStore::save(engine, "shop", path);
+        std::string text = read_file(path);
+        check(text.find("beelzebub") != std::string::npos, "beelzebub survives to disk");
+        check(text.find("nullable") != std::string::npos, "nullable survives to disk");
+        check(text.find("check above 0") != std::string::npos, "check survives to disk");
+        check(text.find("references teams id") != std::string::npos,
+              "foreign key survives to disk");
+
+        Engine fresh;
+        SnapshotStore::load(fresh, path);
+        const auto schema = fresh.table_schema("staff");
+        check(schema.column_at(0).is_primary, "primary flag survives the round trip");
+        check(!schema.column_at(1).required, "nullable survives the round trip");
+        check(schema.column_at(2).checks.size() == 1, "check survives the round trip");
+        check(schema.column_at(1).references.has_value() &&
+                  schema.column_at(1).references->table == "teams",
+              "foreign key survives the round trip");
+        check(fresh.row_at("staff", 0)[1].type() == ValueType::Null,
+              "null value survives the round trip");
+
+        // v1 file (no new flags) still loads: required + unique only.
+        auto v1 = temp_path("v1compat", ".exd");
+        write_file(v1,
+                   "EXDEUS_SNAPSHOT 1\n"
+                   "database old\n"
+                   "table t 2\n"
+                   "column a integer required unique\n"
+                   "column b text required\n"
+                   "row 1 \"x\"\n"
+                   "end database old\n");
+        Engine legacy;
+        check(SnapshotStore::load(legacy, v1) == "old", "v1 snapshot still loads");
+        check(legacy.table_schema("t").column_at(0).unique, "v1 unique flag loads");
     }
 
     std::cout << "All snapshot tests passed.\n";

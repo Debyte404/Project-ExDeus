@@ -120,7 +120,7 @@ void print_banner() {
         "\x1b[0m""\n"
         << "  " "\x1b[1;97m""Engine    " "\x1b[0m""in-memory tables, snapshots" "\x1b[0m""\n"
         << "  " "\x1b[1;97m""Language  " "\x1b[0m""ExdeusQL: lexer -> parser" "\x1b[0m""\n"
-        << "  " "\x1b[1;97m""Book      " "\x1b[0m""docs/book, lessons 01-10" "\x1b[0m""\n"
+        << "  " "\x1b[1;97m""Book      " "\x1b[0m""docs/book, lessons 01-10 + 12" "\x1b[0m""\n"
         << "  " "\x1b[1;97m""REPL      " "\x1b[0m""`help` for commands, `quit`" "\x1b[0m""\n"
         << "\n";
 }
@@ -129,7 +129,9 @@ void print_help() {
     std::cout << "ExdeusQL commands (end every command with `;`):\n"
               << "  create db <name>;                 create a database\n"
               << "  harness <name>;                   select a database\n"
-              << "  forge table <t> with a: integer, b: text;   create a table\n"
+              << "  forge table <t> with id: integer beelzebub, n: text not null;  create a table\n"
+              << "    beelzebub = primary key (one per table); also: unique, null (nullable),\n"
+              << "    check above 0, references parent(col)\n"
               << "  add <t> (1, \"Asha\");             insert a row\n"
               << "  seek <t> [show * | show a, b] [inner join <t2> on <t1.a> equals <t2.b>]\n"
               << "          [where a above 1] [order by a];\n"

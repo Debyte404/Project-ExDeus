@@ -16,7 +16,10 @@ namespace exdeus::repl {
 namespace {
 
 using exdeus::core::Column;
+using exdeus::core::CheckConstraint;
+using exdeus::core::CheckOp;
 using exdeus::core::Engine;
+using exdeus::core::ForeignRef;
 using exdeus::core::Row;
 using exdeus::core::Schema;
 using exdeus::core::Table;
@@ -191,7 +194,32 @@ Result Interpreter::run_harness(const exdeus::language::HarnessDb& command) {
 Result Interpreter::run_forge(const exdeus::language::ForgeTable& command) {
     std::vector<Column> columns;
     for (const auto& def : command.columns) {
-        columns.push_back(Column{def.name, def.type, true, def.unique});
+        Column column;
+        column.name = def.name;
+        column.type = def.type;
+        column.required = def.required_flag;
+        column.unique = def.unique;
+        column.is_primary = def.is_primary;
+        for (const auto& check : def.checks) {
+            CheckOp mapped = CheckOp::Equals;
+            switch (check.op) {
+                case exdeus::language::FilterOp::Equals:
+                    mapped = CheckOp::Equals;
+                    break;
+                case exdeus::language::FilterOp::Above:
+                    mapped = CheckOp::Above;
+                    break;
+                case exdeus::language::FilterOp::Below:
+                    mapped = CheckOp::Below;
+                    break;
+            }
+            column.checks.push_back(CheckConstraint{mapped, check.literal});
+        }
+        if (def.references) {
+            column.references =
+                ForeignRef{def.references->table, def.references->column};
+        }
+        columns.push_back(std::move(column));
     }
     engine_.create_table(command.table, Schema(std::move(columns)));
     return Result{"forged table " + command.table, std::nullopt};

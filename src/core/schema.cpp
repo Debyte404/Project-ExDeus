@@ -8,12 +8,23 @@
 namespace exdeus::core {
 
 Schema::Schema(std::vector<Column> columns) : columns_(std::move(columns)) {
+    size_t primaries = 0;
     for (size_t i = 0; i < columns_.size(); ++i) {
+        if (columns_[i].is_primary) {
+            ++primaries;
+            // beelzebub implies unique + required: normalize here so every
+            // construction path (forge, snapshot, add_column) agrees.
+            columns_[i].unique = true;
+            columns_[i].required = true;
+        }
         for (size_t j = i + 1; j < columns_.size(); ++j) {
             if (columns_[i].name == columns_[j].name) {
                 throw TableError("duplicate column name: " + columns_[i].name);
             }
         }
+    }
+    if (primaries > 1) {
+        throw TableError("multiple beelzebub columns: only one primary key per table");
     }
 }
 
@@ -57,6 +68,15 @@ const Column& Schema::column(const std::string& name) const {
 void Schema::add_column(Column column) {
     if (has_column(column.name)) {
         throw TableError("duplicate column name: " + column.name);
+    }
+    if (column.is_primary) {
+        for (const Column& existing : columns_) {
+            if (existing.is_primary) {
+                throw TableError("multiple beelzebub columns: only one primary key per table");
+            }
+        }
+        column.unique = true;
+        column.required = true;
     }
     columns_.push_back(std::move(column));
 }

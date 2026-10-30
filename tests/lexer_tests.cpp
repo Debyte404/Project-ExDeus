@@ -11,6 +11,7 @@ namespace {
 using exdeus::language::Lexer;
 using exdeus::language::Token;
 using exdeus::language::TokenKind;
+using exdeus::core::ValueType;
 
 void check(bool condition, const char* message) {
     if (!condition) {
@@ -166,6 +167,22 @@ void run_lexer_tests() {
 
         auto short_join = lex("join t2 on a.x equals b.y");
         check(at(short_join, 0).kind == TokenKind::KwJoin, "join works without inner");
+    }
+
+    // 8. Constraint keywords lex correctly.
+    {
+        auto tokens = lex("beelzebub not null check references");
+        check(at(tokens, 0).kind == TokenKind::KwBeelzebub, "beelzebub lexes as keyword");
+        check(at(tokens, 1).kind == TokenKind::KwNot, "not lexes as keyword");
+        check(at(tokens, 3).kind == TokenKind::KwCheck, "check lexes as keyword");
+        check(at(tokens, 4).kind == TokenKind::KwReferences, "references lexes as keyword");
+
+        auto nul = lex("null");
+        check(at(nul, 0).kind == TokenKind::NullLit, "null lexes as NullLit");
+        check(at(nul, 0).literal->type() == ValueType::Null, "null carries a Null value");
+
+        auto forge = lex("forge table t with id: integer beelzebub, n: text not null;");
+        check(at(forge, 7).kind == TokenKind::KwBeelzebub, "beelzebub survives a forge header");
     }
 
     std::cout << "All lexer tests passed.\n";

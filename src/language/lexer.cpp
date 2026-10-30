@@ -29,11 +29,15 @@ const std::unordered_map<std::string, TokenKind>& keywords() {
         {"below", TokenKind::KwBelow},     {"plus", TokenKind::KwPlus},
         {"minus", TokenKind::KwMinus},     {"unique", TokenKind::KwUnique},
         {"required", TokenKind::KwRequired},
+        {"beelzebub", TokenKind::KwBeelzebub},
+        {"not", TokenKind::KwNot},         {"check", TokenKind::KwCheck},
+        {"references", TokenKind::KwReferences},
         {"integer", TokenKind::KwInteger}, {"decimal", TokenKind::KwDecimal},
         {"text", TokenKind::KwText},       {"boolean", TokenKind::KwBoolean},
         {"inner", TokenKind::KwInner},     {"join", TokenKind::KwJoin},
         {"on", TokenKind::KwOn},
         {"true", TokenKind::BoolLit},      {"false", TokenKind::BoolLit},
+        {"null", TokenKind::NullLit},
     };
     return table;
 }
@@ -82,6 +86,10 @@ const char* to_string(TokenKind kind) {
         case TokenKind::KwMinus: return "minus";
         case TokenKind::KwUnique: return "unique";
         case TokenKind::KwRequired: return "required";
+        case TokenKind::KwBeelzebub: return "beelzebub";
+        case TokenKind::KwNot: return "not";
+        case TokenKind::KwCheck: return "check";
+        case TokenKind::KwReferences: return "references";
         case TokenKind::KwInteger: return "integer";
         case TokenKind::KwDecimal: return "decimal";
         case TokenKind::KwText: return "text";
@@ -93,6 +101,7 @@ const char* to_string(TokenKind kind) {
         case TokenKind::DecimalLit: return "decimal literal";
         case TokenKind::StringLit: return "string literal";
         case TokenKind::BoolLit: return "boolean literal";
+        case TokenKind::NullLit: return "null literal";
         case TokenKind::Identifier: return "identifier";
         case TokenKind::Semicolon: return ";";
         case TokenKind::Comma: return ",";
@@ -241,6 +250,8 @@ void Lexer::scan_word() {
     Token token = make_token(it->second, word, start);
     if (it->second == TokenKind::BoolLit) {
         token.literal = exdeus::core::Value::boolean(lower_copy(word) == "true");
+    } else if (it->second == TokenKind::NullLit) {
+        token.literal = exdeus::core::Value::null();
     }
     tokens_.push_back(std::move(token));
 }

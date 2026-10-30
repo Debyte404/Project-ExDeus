@@ -85,6 +85,7 @@ exdeus::core::Value Parser::expect_literal(const std::string& what) {
         case TokenKind::DecimalLit:
         case TokenKind::StringLit:
         case TokenKind::BoolLit:
+        case TokenKind::NullLit:
             advance();
             return *token.literal;
         default:
@@ -167,7 +168,8 @@ ForgeTable Parser::parse_forge() {
 }
 
 ColumnDef Parser::parse_column_def() {
-    ColumnDef def{expect_name("a column name"), exdeus::core::ValueType::Text, false};
+    ColumnDef def{expect_name("a column name"), exdeus::core::ValueType::Text, false, true,
+                  false, {}, std::nullopt};
     expect(TokenKind::Colon, "':'");
     const Token& type = peek();
     switch (type.kind) {
@@ -179,15 +181,111 @@ ColumnDef Parser::parse_column_def() {
             fail(type, "a column type (integer, decimal, text, boolean)");
     }
     advance();
-    // Optional `required` (accepted, always true in week 1) then `unique`.
-    if (check(TokenKind::KwRequired)) {
-        advance();
+    // Constraint flags in any order, each at most once:
+    // beelzebub (primary), unique, required / not null / null (nullable),
+    // check <op> <literal> [and <op> <literal>...], references t(c).
+    bool seen_primary = false;
+    bool seen_unique = false;
+    bool seen_required = false;
+    bool seen_nullable = false;
+    bool seen_check = false;
+    bool seen_ref = false;
+    while (true) {
+        if (check(TokenKind::KwBeelzebub)) {
+            if (seen_primary) {
+                fail(peek(), "duplicate beelzebub on one column");
+            }
+            advance();
+            def.is_primary = true;
+            def.unique = true;
+            def.required_flag = true;
+            seen_primary = true;
+        } else if (check(TokenKind::KwUnique)) {
+            if (seen_unique) {
+                fail(peek(), "duplicate unique on one column");
+            }
+            advance();
+            def.unique = true;
+            seen_unique = true;
+        } else if (check(TokenKind::KwRequired)) {
+            if (seen_required || seen_nullable) {
+                fail(peek(), "conflicting nullability on one column");
+            }
+            advance();
+            def.required_flag = true;
+            seen_required = true;
+        } else if (check(TokenKind::KwNot)) {
+            if (seen_required || seen_nullable) {
+                fail(peek(), "conflicting nullability on one column");
+            }
+            advance();
+            expect(TokenKind::NullLit, "'null' after 'not'");
+            def.required_flag = true;  // NOT NULL
+            seen_required = true;
+        } else if (check(TokenKind::NullLit)) {
+            if (seen_required || seen_nullable) {
+                fail(peek(), "conflicting nullability on one column");
+            }
+            advance();
+            def.required_flag = false;  // nullable
+            seen_nullable = true;
+        } else if (check(TokenKind::KwCheck)) {
+            if (seen_check) {
+                fail(peek(), "duplicate check on one column (use and inside one check)");
+            }
+            advance();
+            def.checks.push_back(parse_check_item());
+            while (check(TokenKind::KwAnd)) {
+                advance();
+                def.checks.push_back(parse_check_item());
+            }
+            seen_check = true;
+        } else if (check(TokenKind::KwReferences)) {
+            if (seen_ref) {
+                fail(peek(), "duplicate references on one column");
+            }
+            advance();
+            RefDef ref{expect_name("a parent table name"), ""};
+            expect(TokenKind::LParen, "'('");
+            ref.column = expect_name("a parent column name");
+            expect(TokenKind::RParen, "')'");
+            def.references = std::move(ref);
+            seen_ref = true;
+        } else {
+            break;
+        }
     }
-    if (check(TokenKind::KwUnique)) {
-        advance();
+    // beelzebub wins over a stray `null`: a primary can never be nullable.
+    if (def.is_primary) {
         def.unique = true;
+        def.required_flag = true;
     }
     return def;
+}
+
+CheckDef Parser::parse_check_item() {
+    CheckDef item{FilterOp::Equals, exdeus::core::Value::boolean(false)};
+    const Token& op = peek();
+    switch (op.kind) {
+        case TokenKind::KwEquals:
+        case TokenKind::Equal:
+        case TokenKind::Assign:
+            item.op = FilterOp::Equals;
+            break;
+        case TokenKind::KwAbove:
+        case TokenKind::Greater:
+            item.op = FilterOp::Above;
+            break;
+        case TokenKind::KwBelow:
+        case TokenKind::Less:
+            item.op = FilterOp::Below;
+            break;
+        default:
+            fail(op, "a check comparison (equals, above, below, =, ==, >, <)");
+    }
+    advance();
+    item.literal = expect_literal("a check value");
+    return item;
 }
 
 AddRow Parser::parse_add() {

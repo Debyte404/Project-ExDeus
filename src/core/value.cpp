@@ -26,6 +26,10 @@ Value Value::boolean(bool value) {
     return Value(ValueType::Boolean, Data(value));
 }
 
+Value Value::null() {
+    return Value(ValueType::Null, Data(std::monostate{}));
+}
+
 ValueType Value::type() const {
     return type_;
 }
@@ -38,7 +42,9 @@ std::string Value::to_string() const {
     return std::visit(
         [](const auto& active) -> std::string {
             using T = std::decay_t<decltype(active)>;
-            if constexpr (std::is_same_v<T, std::string>) {
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                return "null";
+            } else if constexpr (std::is_same_v<T, std::string>) {
                 return active;
             } else if constexpr (std::is_same_v<T, bool>) {
                 return active ? "true" : "false";

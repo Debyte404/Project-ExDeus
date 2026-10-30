@@ -9,18 +9,35 @@
 
 namespace exdeus::language {
 
-// Column declaration inside `forge table ... with name: type [unique]`.
-struct ColumnDef {
-    std::string name;
-    exdeus::core::ValueType type;
-    bool unique = false;
-};
-
-// Comparison operators for `where` filters.
+// Comparison operators for `where` filters and CHECK constraints.
 enum class FilterOp {
     Equals,  // equals / == / =
     Above,   // above / >
     Below,   // below / <
+};
+
+// Column declaration inside `forge table ... with ...`.
+// Example: `id: integer beelzebub, name: text not null,
+//            balance: decimal check above 0,
+//            customer_id: integer references customers(id)`
+struct CheckDef {
+    FilterOp op;
+    exdeus::core::Value literal;
+};
+
+struct RefDef {
+    std::string table;
+    std::string column;
+};
+
+struct ColumnDef {
+    std::string name;
+    exdeus::core::ValueType type;
+    bool unique = false;
+    bool required_flag = true;  // true = NOT NULL; `null` alone makes it false
+    bool is_primary = false;    // beelzebub: single per table, implies unique + required
+    std::vector<CheckDef> checks;
+    std::optional<RefDef> references;
 };
 
 // One `where` condition. Compares a column against a literal

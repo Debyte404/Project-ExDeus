@@ -22,7 +22,9 @@ public:
 //
 //   create db <name>;
 //   harness <name>;
-//   forge table <name> with <col>: <type> [unique], ... ;
+//   forge table <name> with <col>: <type> [beelzebub] [unique]
+//                [required | not null | null] [check <op> <lit> (and <op> <lit>)*]
+//                [references <table>(<col>)], ... ;
 //   add <table> (<lit>, ...);
 //   seek <table> [show <col>, ... | show *]
 //                [inner join <table> on <q.col> equals <q.col>]
@@ -74,6 +76,7 @@ private:
     std::optional<JoinClause> parse_join();
     std::vector<Condition> parse_conditions();
     Condition parse_condition();
+    CheckDef parse_check_item();
     std::vector<Assignment> parse_assignments();
     Assignment parse_assignment();
     ColumnDef parse_column_def();

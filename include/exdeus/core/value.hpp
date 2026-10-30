@@ -14,16 +14,18 @@ namespace exdeus::core {
         Decimal,
         Text,
         Boolean,
+        Null,
     };
 
     class Value{
         public:
-            using Data = std::variant<long long, double, std::string, bool>;
+            using Data = std::variant<std::monostate, long long, double, std::string, bool>;
 
             static Value integer(long long value);
             static Value decimal(double value);
             static Value text(std::string value);
             static Value boolean(bool value);
+            static Value null();
 
             ValueType type() const;
             const Data& data() const;

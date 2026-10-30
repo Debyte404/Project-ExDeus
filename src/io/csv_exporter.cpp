@@ -32,6 +32,9 @@ std::string format_decimal(double value) {
 // quotes with every inner quote doubled. Plain fields stay bare, so
 // `Asha` never becomes `"Asha"`.
 std::string csv_field(const Value& value) {
+    if (value.type() == ValueType::Null) {
+        return "";
+    }
     if (value.type() == ValueType::Integer) {
         return std::to_string(std::get<long long>(value.data()));
     }

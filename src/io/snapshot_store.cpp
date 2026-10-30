@@ -12,14 +12,18 @@ namespace exdeus::io {
 
 namespace {
 
+using exdeus::core::CheckConstraint;
+using exdeus::core::CheckOp;
 using exdeus::core::Column;
 using exdeus::core::Engine;
+using exdeus::core::ForeignRef;
 using exdeus::core::Row;
 using exdeus::core::Schema;
 using exdeus::core::Value;
 using exdeus::core::ValueType;
 
-constexpr int kVersion = 1;
+constexpr int kVersion = 2;
+constexpr int kMinVersion = 1;
 
 // One whitespace-separated field of a snapshot line. Quoted fields arrive
 // decoded (`\"` -> `"`, `\n` -> newline); bare fields arrive raw. Row
@@ -110,6 +114,8 @@ std::string quote_text(const std::string& value) {
 
 std::string format_value(const Value& value) {
     switch (value.type()) {
+        case ValueType::Null:
+            return "null";
         case ValueType::Integer:
             return std::to_string(std::get<long long>(value.data()));
         case ValueType::Decimal:
@@ -240,6 +246,10 @@ double parse_decimal(const std::string& token, size_t lineno) {
 }
 
 Value parse_field(const Column& column, const Field& field, size_t lineno) {
+    // Bare `null` is the null value for any column type; quoted "null" stays text.
+    if (!field.quoted && field.text == "null") {
+        return Value::null();
+    }
     switch (column.type) {
         case ValueType::Integer:
             if (field.quoted) {
@@ -300,7 +310,9 @@ Schema parse_schema(const std::vector<std::string>& lines, size_t& pos, size_t c
             continue;
         }
         if (fields[0].text != "column" || fields.size() < 3) {
-            fail(lineno, "expected 'column <name> <type> [required] [unique]'");
+            fail(lineno,
+                 "expected 'column <name> <type> [required|nullable] [unique] [beelzebub] "
+                 "[check <op> <value> ...] [references <table> <column>]'");
         }
         if (fields[1].quoted || fields[2].quoted) {
             fail(lineno, "column names and types must not be quoted");
@@ -310,12 +322,77 @@ Schema parse_schema(const std::vector<std::string>& lines, size_t& pos, size_t c
             fail(lineno, "column name must not be empty");
         }
         for (size_t f = 3; f < fields.size(); ++f) {
-            if (fields[f].text == "required") {
+            const std::string& flag = fields[f].text;
+            if (flag == "required") {
                 column.required = true;
-            } else if (fields[f].text == "unique") {
+            } else if (flag == "nullable") {
+                column.required = false;
+            } else if (flag == "unique") {
                 column.unique = true;
+            } else if (flag == "beelzebub") {
+                column.is_primary = true;
+                column.unique = true;
+                column.required = true;
+            } else if (flag == "check") {
+                // check <op> <value>: op is equals/above/below (or ==,>,<,=).
+                if (f + 2 >= fields.size()) {
+                    fail(lineno, "'check' needs an operator and a value");
+                }
+                const std::string& op_word = fields[++f].text;
+                const Field& lit = fields[++f];
+                CheckOp rule_op = CheckOp::Equals;
+                if (op_word == "equals" || op_word == "==" || op_word == "=") {
+                    rule_op = CheckOp::Equals;
+                } else if (op_word == "above" || op_word == ">") {
+                    rule_op = CheckOp::Above;
+                } else if (op_word == "below" || op_word == "<") {
+                    rule_op = CheckOp::Below;
+                } else {
+                    fail(lineno, "unknown check operator '" + op_word + "'");
+                }
+                Value rule_literal = Value::boolean(false);
+                if (lit.quoted) {
+                    rule_literal = Value::text(lit.text);
+                } else if (lit.text == "true") {
+                    rule_literal = Value::boolean(true);
+                } else if (lit.text == "false") {
+                    rule_literal = Value::boolean(false);
+                } else if (lit.text == "null") {
+                    rule_literal = Value::null();
+                } else {
+                    // Bare number: try integer first, then decimal.
+                    try {
+                        size_t used = 0;
+                        long long ival = std::stoll(lit.text, &used);
+                        if (used == lit.text.size()) {
+                            rule_literal = Value::integer(ival);
+                        } else {
+                            rule_literal = Value::decimal(std::stod(lit.text));
+                        }
+                    } catch (...) {
+                        try {
+                            rule_literal = Value::decimal(std::stod(lit.text));
+                        } catch (...) {
+                            fail(lineno, "bad check value '" + lit.text + "'");
+                        }
+                    }
+                }
+                column.checks.push_back(CheckConstraint{rule_op, std::move(rule_literal)});
+            } else if (flag == "references") {
+                if (f + 2 >= fields.size()) {
+                    fail(lineno, "'references' needs a table and a column");
+                }
+                const std::string& ref_table = fields[++f].text;
+                const std::string& ref_col = fields[++f].text;
+                if (ref_table.empty() || ref_col.empty()) {
+                    fail(lineno, "'references' needs a table and a column");
+                }
+                column.references = ForeignRef{ref_table, ref_col};
+            } else if (flag == "and") {
+                fail(lineno,
+                     "'and' between checks is ExdeusQL-only; snapshots repeat 'check' per rule");
             } else {
-                fail(lineno, "unknown column flag '" + fields[f].text + "'");
+                fail(lineno, "unknown column flag '" + flag + "'");
             }
         }
         columns.push_back(std::move(column));
@@ -344,7 +421,13 @@ void check_unique(const ParsedTable& table, const Row& row, size_t lineno) {
         if (!table.schema.column_at(i).unique) {
             continue;
         }
+        if (row[i].type() == ValueType::Null) {
+            continue;  // nulls never conflict (SQL semantics)
+        }
         for (const Row& existing : table.rows) {
+            if (existing[i].type() == ValueType::Null) {
+                continue;
+            }
             if (existing[i] == row[i]) {
                 fail(lineno, "duplicate value in unique column '" +
                                  table.schema.column_at(i).name + "'");
@@ -362,7 +445,13 @@ ParsedDb parse_snapshot(const std::string& text) {
     if (lines[0].rfind(header, 0) != 0) {
         throw SnapshotError("missing snapshot version header, found '" + lines[0] + "'");
     }
-    if (lines[0].substr(header.size()) != std::to_string(kVersion)) {
+    int version = 0;
+    try {
+        version = std::stoi(lines[0].substr(header.size()));
+    } catch (...) {
+        throw SnapshotError("bad snapshot version: '" + lines[0].substr(header.size()) + "'");
+    }
+    if (version < kMinVersion || version > kVersion) {
         throw SnapshotError("unsupported snapshot version: '" +
                             lines[0].substr(header.size()) + "'");
     }
@@ -476,11 +565,32 @@ void SnapshotStore::save(const Engine& engine, const std::string& database,
         out << "table " << table_name << " " << schema.column_count() << "\n";
         for (const Column& column : schema.columns()) {
             out << "column " << column.name << " " << type_word(column.type);
-            if (column.required) {
-                out << " required";
+            if (column.is_primary) {
+                out << " beelzebub";
+            } else {
+                out << (column.required ? " required" : " nullable");
+                if (column.unique) {
+                    out << " unique";
+                }
             }
-            if (column.unique) {
-                out << " unique";
+            for (const auto& check : column.checks) {
+                out << " check ";
+                switch (check.op) {
+                    case CheckOp::Equals:
+                        out << "equals";
+                        break;
+                    case CheckOp::Above:
+                        out << "above";
+                        break;
+                    case CheckOp::Below:
+                        out << "below";
+                        break;
+                }
+                out << " " << format_value(check.literal);
+            }
+            if (column.references) {
+                out << " references " << column.references->table << " "
+                    << column.references->column;
             }
             out << "\n";
         }
