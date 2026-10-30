@@ -27,10 +27,14 @@ using Row = std::vector<Value>;
 class Table {
 public:
     Table() = default;
-    Table(std::string name, Schema schema);
+    Table(std::string name, Schema schema, bool temp = false);
 
     const std::string& name() const;
     const Schema& schema() const;
+    // Session-temp tables (from `seek ... into`) live in memory only:
+    // snapshots skip them, so they never reach disk.
+    bool is_temp() const;
+    void set_temp(bool temp);
     size_t row_count() const;
     const Row& row_at(size_t index) const;
     const std::vector<Row>& rows() const;
@@ -49,6 +53,7 @@ private:
     std::string name_;
     Schema schema_;
     std::vector<Row> rows_;
+    bool temp_ = false;
 };
 
 }  // namespace exdeus::core

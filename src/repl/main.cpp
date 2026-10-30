@@ -13,12 +13,15 @@
 
 #include "exdeus/language/lexer.hpp"
 #include "exdeus/language/parser.hpp"
+#include "exdeus/repl/highlight.hpp"
 #include "exdeus/repl/interpreter.hpp"
 
 namespace {
 
 using exdeus::language::Command;
+using exdeus::language::Position;
 using exdeus::language::TokenKind;
+using exdeus::repl::highlight;
 
 // ANSI styles: pure decoration on output only, never on stored data.
 // Every styled print ends with RESET so a color can never leak into
@@ -135,45 +138,52 @@ void print_banner() {
 void print_help() {
     // One color per job so the eye can scan: YELLOW examples, DIM notes,
     // MAGENTA comments (nothing else uses it), BRIGHT_CYAN REPL verbs.
-    // Groups with a blank line between them; `;` ends every command.
+    // Descriptions start at one column; long examples wrap with indent.
     std::cout << BOLD << "ExdeusQL" << RESET << " - groups, examples, notes:\n"
               << "\n"
               << BOLD << "  databases" << RESET << "\n"
               << "  " << YELLOW << "create db <name>;" << RESET
-              << "          make a database (does not select it)\n"
+              << "                     make a database (does not select it)\n"
               << "  " << YELLOW << "harness <name>;" << RESET
-              << "              pick one for the commands below\n"
+              << "                       pick one for the commands below\n"
               << "\n"
               << BOLD << "  tables & rows" << RESET << "\n"
-              << "  " << YELLOW << "forge table <t> with id: integer beelzebub, n: text not null;" << RESET << "\n"
-              << "    " << DIM << "beelzebub = primary key (one per table); also unique, null," << RESET << "\n"
+              << "  " << YELLOW << "forge table <t> with" << RESET << "\n"
+              << "    " << YELLOW << "id: integer beelzebub, n: text not null;" << RESET << "\n"
+              << "    " << DIM << "beelzebub = primary key; also unique, null," << RESET << "\n"
               << "    " << DIM << "check above 0, references parent(col)" << RESET << "\n"
               << "  " << YELLOW << "add <t> (1, \"Asha\");" << RESET
-              << "      insert one row\n"
+              << "                  insert one row\n"
               << "  " << YELLOW << "change <t> set a to 2 [where ...];" << RESET
-              << "  change rows\n"
+              << "    change rows\n"
               << "  " << YELLOW << "remove <t> [where ...];" << RESET
-              << "         delete rows\n"
+              << "               delete rows\n"
               << "\n"
               << BOLD << "  queries" << RESET << "\n"
               << "  " << YELLOW << "seek <t> [show * | show a, b]" << RESET << "\n"
               << "          " << YELLOW << "[inner join <t2> on <t1.a> equals <t2.b>]" << RESET << "\n"
-              << "          " << YELLOW << "[where a above 1] [order by a];" << RESET << "\n"
+              << "          " << YELLOW << "[where a above 1] [order by a]" << RESET << "\n"
+              << "          " << YELLOW << "[into <tmp>];" << RESET
+              << "                 stash as a temp table\n"
+              << "  " << YELLOW << "seek (seek <t> show a) show a;" << RESET
+              << "        subquery in parens\n"
+              << "  " << YELLOW << "sort <t> by <col> [asc | desc];" << RESET
+              << "       sort rows, asc by default\n"
               << "\n"
               << BOLD << "  files" << RESET << "\n"
               << "  " << YELLOW << "save db to \"bank.exd\";" << RESET
-              << "    snapshot the harnessed database\n"
+              << "                snapshot the harnessed database\n"
               << "  " << YELLOW << "load db from \"bank.exd\";" << RESET
-              << "    restore it (try it right now)\n"
+              << "              restore it (try it right now)\n"
               << "  " << YELLOW << "export <t> to \"t.csv\";" << RESET
-              << "         dump one table as CSV\n"
+              << "                dump one table as CSV\n"
               << "  " << YELLOW << "run \"examples/bank.exql\";" << RESET
-              << "  execute a script file, line by line\n"
+              << "             execute a script file, line by line\n"
               << "    " << DIM << "paths are relative to launch dir; replies show the full path" << RESET << "\n"
               << "    " << DIM << "forward slashes (\"dir/f.exd\") - \\n and \\t are string escapes" << RESET << "\n"
               << "\n"
               << "  " << MAGENTA << "# like this, or -- like this" << RESET
-              << "  comments, both run to end of line\n"
+              << "          comments, both run to end of line\n"
               << "\n"
               << "  REPL: " << BRIGHT_CYAN << "help" << RESET << "  "
               << BRIGHT_CYAN << "banner" << RESET << "  "
@@ -237,6 +247,34 @@ void print_result(const Result& result) {
     }
 }
 
+// Failed command, replayed the way the lexer saw it: the offending line
+// highlighted, a caret under the exact column, then the message. Multi-line
+// input shows only the failing line, so the caret always lines up.
+void print_error_with_source(const std::string& source, Position position,
+                             const std::string& message) {
+    std::string line;
+    {
+        std::istringstream lines(source);
+        std::string current;
+        size_t lineno = 0;
+        line = source;
+        while (std::getline(lines, current)) {
+            ++lineno;
+            if (lineno == position.line) {
+                line = current;
+                break;
+            }
+        }
+    }
+    std::cout << DIM << "  in: " << RESET << highlight(line) << "\n";
+    std::cout << "      ";
+    for (size_t i = 1; i < position.column; ++i) {
+        std::cout << ' ';
+    }
+    std::cout << BRIGHT_RED << BOLD << "^" << RESET << "\n";
+    print_error(message);
+}
+
 // Runs an .exql script file: every command executes in order through the
 // same Lexer -> Parser -> Interpreter path as typed input, each result
 // printed as it runs. One bad command prints its error and the script
@@ -280,9 +318,9 @@ void run_script_file(Interpreter& db, const std::string& raw_path) {
         }
         print_ok("ran " + std::to_string(commands.size()) + " commands from " + abs);
     } catch (const LexerError& e) {
-        print_error(e.what());
+        print_error_with_source(text.str(), e.position(), e.what());
     } catch (const ParserError& e) {
-        print_error(e.what());
+        print_error_with_source(text.str(), e.position(), e.what());
     } catch (const std::exception& e) {
         print_error(e.what());
     }
@@ -380,9 +418,9 @@ int main() {
                 print_result(result);
             }
         } catch (const LexerError& e) {
-            print_error(e.what());
+            print_error_with_source(source, e.position(), e.what());
         } catch (const ParserError& e) {
-            print_error(e.what());
+            print_error_with_source(source, e.position(), e.what());
         } catch (const std::exception& e) {
             // Engine, table, interpreter, and catalog errors all land here:
             // the session survives and the next command runs clean.

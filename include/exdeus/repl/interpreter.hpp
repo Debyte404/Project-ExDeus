@@ -33,6 +33,13 @@ struct Result {
     std::optional<ResultTable> table;
 };
 
+// Answer plus the display column types, so `into` tables and subquery
+// sources keep exact types even when the answer holds zero rows.
+struct SeekOutcome {
+    Result result;
+    std::vector<exdeus::core::ValueType> col_types;
+};
+
 // Interpreter executes parsed Command objects against an Engine.
 // It owns grammar-free execution only: no Lexer, no Parser inside.
 // SaveDb/LoadDb delegate to the snapshot store, ExportTable to the CSV
@@ -56,6 +63,10 @@ private:
     Result run_forge(const exdeus::language::ForgeTable& command);
     Result run_add(const exdeus::language::AddRow& command);
     Result run_seek(const exdeus::language::SeekRows& command);
+    SeekOutcome run_seek_depth(const exdeus::language::SeekRows& command, int depth);
+    SeekOutcome run_seek_against(const exdeus::language::SeekRows& command,
+                                 const exdeus::core::Table& source,
+                                 const std::string& source_name);
     Result run_change(const exdeus::language::ChangeRows& command);
     Result run_remove(const exdeus::language::RemoveRows& command);
     Result run_save(const exdeus::language::SaveDb& command);

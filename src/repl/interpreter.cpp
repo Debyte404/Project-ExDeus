@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -134,6 +135,40 @@ std::string plural(size_t count, const char* word) {
     return std::to_string(count) + " " + word + (count == 1 ? "" : "s");
 }
 
+// Strip a `table.` qualifier: `customers.name` -> `name`. Bare names pass
+// through unchanged.
+std::string bare_name(const std::string& ref) {
+    size_t dot = ref.rfind('.');
+    return (dot == std::string::npos) ? ref : ref.substr(dot + 1);
+}
+
+// Build a session-temp-shaped Table from an answer: bare display names,
+// exact column types, everything nullable, no checks or keys. Duplicate
+// bare names (e.g. a join's two `id` columns) fail loudly so the caller
+// narrows the projection instead of guessing.
+Table materialize_temp(const std::string& name, const ResultTable& answer,
+                       const std::vector<ValueType>& types) {
+    if (types.size() != answer.columns.size()) {
+        throw InterpreterError("internal: answer type/column count mismatch");
+    }
+    std::vector<Column> cols;
+    for (size_t i = 0; i < answer.columns.size(); ++i) {
+        std::string bare = bare_name(answer.columns[i]);
+        for (const Column& existing : cols) {
+            if (existing.name == bare) {
+                throw InterpreterError("column '" + bare +
+                                       "' is ambiguous: narrow the projection");
+            }
+        }
+        cols.push_back(Column{bare, types[i], false, false, false, {}, std::nullopt});
+    }
+    Table staged(name, Schema(std::move(cols)));
+    for (const std::vector<Value>& vals : answer.rows) {
+        staged.insert(vals);
+    }
+    return staged;
+}
+
 // File paths arrive from ExdeusQL string literals. On Windows users type
 // backslashes (`snapshots\bank.exd`), so normalize them to forward slashes
 // before touching the filesystem — backslash is not a valid filename
@@ -261,7 +296,36 @@ Result Interpreter::run_add(const exdeus::language::AddRow& command) {
 }
 
 Result Interpreter::run_seek(const exdeus::language::SeekRows& command) {
-    const Table& left_table = engine_.table(command.table);
+    return run_seek_depth(command, 0).result;
+}
+
+SeekOutcome Interpreter::run_seek_depth(const exdeus::language::SeekRows& command,
+                                        int depth) {
+    if (depth > 8) {
+        throw InterpreterError("subqueries nested too deep (max 8)");
+    }
+    // Resolve the FROM source: a catalog table, or a parenthesized
+    // subquery materialized in memory for this query only.
+    const Table* source = nullptr;
+    std::unique_ptr<Table> owned;
+    std::string source_name;
+    if (command.from_query) {
+        SeekOutcome inner = run_seek_depth(*command.from_query, depth + 1);
+        owned = std::make_unique<Table>(
+            materialize_temp("(subquery)", *inner.result.table, inner.col_types));
+        source = owned.get();
+        source_name = "(subquery)";
+    } else {
+        source = &engine_.table(command.table);
+        source_name = command.table;
+    }
+    return run_seek_against(command, *source, source_name);
+}
+
+SeekOutcome Interpreter::run_seek_against(const exdeus::language::SeekRows& command,
+                                          const Table& source,
+                                          const std::string& source_name) {
+    const Table& left_table = source;
     const Schema& left_schema = left_table.schema();
 
     const Table* right_table = nullptr;
@@ -273,7 +337,7 @@ Result Interpreter::run_seek(const exdeus::language::SeekRows& command) {
 
     // Column map resolves bare and qualified names into composite-row indexes.
     std::map<std::string, size_t> columns =
-        build_columns(command.table, left_schema,
+        build_columns(source_name, left_schema,
                       command.join ? &command.join->table : nullptr, right_schema);
 
     // Validate projection and ordering columns before touching rows.
@@ -284,7 +348,7 @@ Result Interpreter::run_seek(const exdeus::language::SeekRows& command) {
         // Qualified when joined so `id` vs `id` stays unambiguous.
         if (right_schema) {
             for (const Column& c : left_schema.columns()) {
-                std::string ref = command.table + "." + c.name;
+                std::string ref = source_name + "." + c.name;
                 display_names.push_back(ref);
                 display_indexes.push_back(resolve_column(columns, ref));
             }
@@ -372,12 +436,33 @@ Result Interpreter::run_seek(const exdeus::language::SeekRows& command) {
         answer.rows.push_back(std::move(projected));
     }
 
-    std::string label = command.table;
+    // Display column types come from the source schemas, so `into` tables
+    // and outer subqueries keep exact types even on zero rows.
+    std::vector<ValueType> col_types;
+    size_t left_count = left_schema.column_count();
+    for (size_t idx : display_indexes) {
+        if (idx < left_count) {
+            col_types.push_back(left_schema.column_at(idx).type);
+        } else {
+            col_types.push_back(right_schema->column_at(idx - left_count).type);
+        }
+    }
+
+    std::string label = source_name;
     if (command.join) {
         label += " join " + command.join->table;
     }
-    return Result{"seek " + label + ": " + plural(answer.rows.size(), "row"),
+    if (command.into_table) {
+        Table stashed = materialize_temp(*command.into_table, answer, col_types);
+        engine_.create_temp_table(*command.into_table, stashed.schema());
+        for (const std::vector<Value>& vals : answer.rows) {
+            engine_.insert(*command.into_table, vals);
+        }
+        label += " into " + *command.into_table;
+    }
+    Result result{"seek " + label + ": " + plural(answer.rows.size(), "row"),
                   std::move(answer)};
+    return SeekOutcome{std::move(result), std::move(col_types)};
 }
 
 Result Interpreter::run_change(const exdeus::language::ChangeRows& command) {

@@ -198,3 +198,22 @@ Do not continue to Lesson 8 until you can explain:
 - why `remove` deletes from the back of the match list
 - why `save`/`load`/`export` throw instead of silently succeeding
 - why `help` and `quit` never reach the lexer
+
+## Afterword: scripts, highlighting, and carets (added later)
+
+Three REPL upgrades landed after week 1, all in `src/repl/main.cpp` plus
+one small library:
+
+- `run "examples/bank.exql";` (alias `source`) executes a script file
+  through the same Lexer -> Parser -> Interpreter path as typed input,
+  printing each result and continuing past bad commands. Shape-checked on
+  real lexer tokens (`run`, string, `;`), so it can never shadow a table
+  named `run` — `seek run;` still seeks.
+- `include/exdeus/repl/highlight.hpp` colors any ExdeusQL source from real
+  lexer spans: keywords cyan, strings yellow, numbers/booleans/null
+  magenta, comments dim. Token `end` positions make the slices exact, so
+  whitespace and escapes survive verbatim; lexer failure returns the source
+  uncolored rather than breaking error reporting.
+- `LexerError` and `ParserError` carry their `Position` structurally, and
+  the REPL replays the failing line highlighted with a `^` caret under the
+  exact column — the message you already knew, now pointing at the crime.

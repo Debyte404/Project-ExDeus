@@ -173,6 +173,20 @@ void Engine::create_table(const std::string& table, Schema schema) {
     }
 }
 
+void Engine::create_temp_table(const std::string& table, Schema schema) {
+    const std::string& db = require_selection();
+    try {
+        catalog_.create_table(db, table, std::move(schema));
+        catalog_.mutable_table(db, table).set_temp(true);
+    } catch (const CatalogError& e) {
+        throw EngineError(e.what());
+    }
+}
+
+bool Engine::is_temp(const std::string& table) const {
+    return this->table(table).is_temp();
+}
+
 void Engine::drop_table(const std::string& table) {
     const std::string& db = require_selection();
     try {
@@ -226,6 +240,11 @@ std::vector<std::string> Engine::list_tables() const {
     } catch (const CatalogError& e) {
         throw EngineError(e.what());
     }
+}
+
+bool Engine::has_table(const std::string& table) const {
+    const std::string& db = require_selection();
+    return catalog_.has_table(db, table);
 }
 
 const Table& Engine::table(const std::string& table) const {

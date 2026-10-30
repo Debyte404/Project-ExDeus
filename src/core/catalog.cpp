@@ -142,7 +142,7 @@ void Catalog::rename_table(const std::string& db, const std::string& old_name, c
     database.tables.erase(it);
     // Rebuild under the new name: Table has no rename of its own name
     // field, so rows are re-inserted into a fresh table carrying the schema.
-    Table renamed(new_name, moved.schema());
+    Table renamed(new_name, moved.schema(), moved.is_temp());
     for (const Row& row : moved.rows()) {
         renamed.insert(row);
     }

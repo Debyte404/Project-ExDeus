@@ -296,5 +296,64 @@ void run_parser_tests() {
                      "column-to-column with above fails");
     }
 
+    // 11. `into` parses at the end; subqueries parse in parens.
+    {
+        const auto& into = as<SeekRows>(
+            parse_one("seek customers show name, balance into rich;"), "into parses");
+        check(into.into_table.has_value() && *into.into_table == "rich",
+              "into keeps the temp table name");
+        check(into.show.size() == 2, "show survives alongside into");
+
+        const auto& bare_into = as<SeekRows>(parse_one("seek customers into rich;"),
+                                             "bare into parses");
+        check(bare_into.show.empty() && bare_into.into_table.has_value(),
+              "into works without show");
+
+        const auto& sub = as<SeekRows>(
+            parse_one("seek (seek customers show name) show name;"), "subquery parses");
+        check(sub.from_query != nullptr, "subquery is present");
+        check(sub.from_query->table == "customers", "inner keeps its table");
+        check(sub.from_query->show.size() == 1, "inner keeps its projection");
+        check(sub.table.empty(), "outer has no direct table");
+
+        const auto& nested = as<SeekRows>(
+            parse_one("seek (seek (seek t show a) show a) show a;"), "nested subquery parses");
+        check(nested.from_query->from_query != nullptr, "two levels nest");
+
+        check_throws([] { parse_one("seek customers into;"); }, "into without a name fails");
+        check_throws([] { parse_one("seek (seek t show a;"); }, "unclosed paren fails");
+        check_throws([] { parse_one("seek (customers);"); }, "parens need seek inside");
+    }
+
+    // 12. `sort` desugars to an ordered seek; bare `order by` means ascending.
+    {
+        const auto& sort = as<SeekRows>(parse_one("sort customers by balance;"), "sort parses");
+        check(sort.table == "customers", "sort keeps the table");
+        check(sort.order_by == "balance", "sort keeps the column");
+        check(sort.direction == SortDirection::Ascending, "sort defaults to ascending");
+
+        const auto& down = as<SeekRows>(
+            parse_one("sort customers by balance desc;"), "sort desc parses");
+        check(down.direction == SortDirection::Descending, "desc means descending");
+
+        const auto& up = as<SeekRows>(
+            parse_one("sort customers by balance asc;"), "sort asc parses");
+        check(up.direction == SortDirection::Ascending, "asc means ascending");
+
+        const auto& full = as<SeekRows>(
+            parse_one("sort customers by customers.balance descending into rich;"),
+            "long forms and into work in sort");
+        check(full.direction == SortDirection::Descending, "descending still works");
+        check(full.order_by == "customers.balance", "qualified order-by survives in sort");
+        check(full.into_table.has_value(), "sort supports into");
+
+        const auto& bare = as<SeekRows>(
+            parse_one("seek customers show name order by name;"), "bare order by parses");
+        check(bare.direction == SortDirection::Ascending, "bare order by means ascending");
+
+        check_throws([] { parse_one("sort customers balance;"); }, "sort without by fails");
+        check_throws([] { parse_one("sort customers;"); }, "sort without column fails");
+    }
+
     std::cout << "All parser tests passed.\n";
 }

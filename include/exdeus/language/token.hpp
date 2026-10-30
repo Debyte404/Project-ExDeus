@@ -40,6 +40,9 @@ enum class TokenKind {
     KwBy,
     KwAscending,
     KwDescending,
+    KwAsc,
+    KwDesc,
+    KwSort,
     KwAnd,
     KwOr,
     KwEquals,
@@ -60,6 +63,7 @@ enum class TokenKind {
     KwInner,
     KwJoin,
     KwOn,
+    KwInto,
     // Literals.
     IntegerLit,
     DecimalLit,
@@ -94,9 +98,13 @@ struct Token {
     TokenKind kind;
     std::string lexeme;
     Position position;
+    // End of the token in source (exclusive): the position right after its
+    // last character. Lets the highlighter slice exact source spans, so
+    // whitespace, string escapes, and comments survive verbatim.
+    Position end = Position{1, 1};
     // Set only for the four literal kinds; reused core::Value so the
     // parser can hand values straight to the engine without conversion.
-    std::optional<exdeus::core::Value> literal;
+    std::optional<exdeus::core::Value> literal = std::nullopt;
 };
 
 }  // namespace exdeus::language

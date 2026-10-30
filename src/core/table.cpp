@@ -43,8 +43,8 @@ bool check_value_above(const Value& cell, const Value& bound) {
 
 }  // namespace
 
-Table::Table(std::string name, Schema schema)
-    : name_(std::move(name)), schema_(std::move(schema)) {}
+Table::Table(std::string name, Schema schema, bool temp)
+    : name_(std::move(name)), schema_(std::move(schema)), temp_(temp) {}
 
 const std::string& Table::name() const {
     return name_;
@@ -52,6 +52,14 @@ const std::string& Table::name() const {
 
 const Schema& Table::schema() const {
     return schema_;
+}
+
+bool Table::is_temp() const {
+    return temp_;
+}
+
+void Table::set_temp(bool temp) {
+    temp_ = temp;
 }
 
 size_t Table::row_count() const {

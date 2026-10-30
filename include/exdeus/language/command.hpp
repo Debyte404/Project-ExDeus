@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -103,12 +104,18 @@ struct JoinClause {
 };
 
 struct SeekRows {
-    std::string table;
+    std::string table;  // empty when from_query is set
+    // Parenthesized subquery as the FROM source:
+    // `seek (seek customers show id) show id`. The inner answer is
+    // materialized in memory; the outer query reads it like a table.
+    std::shared_ptr<SeekRows> from_query;
     Projection show;
     std::optional<JoinClause> join;
     std::vector<Condition> where;
     std::string order_by;
     SortDirection direction = SortDirection::None;
+    // `seek ... into <name>`: stash the answer as a session-temp table.
+    std::optional<std::string> into_table;
 };
 
 struct ChangeRows {

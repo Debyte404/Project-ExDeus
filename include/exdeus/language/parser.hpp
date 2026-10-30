@@ -10,10 +10,16 @@
 namespace exdeus::language {
 
 // Named failure: unexpected token or truncated input, always with the
-// 1-based line and column of the offending token.
+// 1-based line and column of the offending token. Carries the position
+// structurally (for the REPL caret) as well as inside the message.
 class ParserError : public std::runtime_error {
 public:
-    using std::runtime_error::runtime_error;
+    ParserError(const std::string& message, Position position)
+        : std::runtime_error(message), position_(position) {}
+    Position position() const { return position_; }
+
+private:
+    Position position_{1, 1};
 };
 
 // Recursive-descent parser: one grammar function per command shape.
@@ -29,7 +35,12 @@ public:
 //   seek <table> [show <col>, ... | show *]
 //                [inner join <table> on <q.col> equals <q.col>]
 //                [where <cond> (and|or <cond>)*]
-//                [order by <col> [ascending|descending]];
+//                [order by <col> [ascending|descending]]
+//                [into <table>];
+//   The <table> may be a parenthesized subquery instead:
+//   seek (seek customers show id) show id;
+//   `sort <table> by <col> [asc|desc]` — sugar over a bare ordered seek.
+//   `into` stashes the answer as a session-temp table (never snapshotted).
 //   change <table> set <col> to <expr>, ... [where ...];
 //   remove <table> [where ...];   ("remove <t> where ..." deletes rows;
 //                                 table drops arrive in Lesson 7 via REPL)
@@ -66,6 +77,12 @@ private:
     ForgeTable parse_forge();
     AddRow parse_add();
     SeekRows parse_seek();
+    // Subquery body shared by top-level seeks and parenthesized subqueries.
+    // `depth` caps nesting so `(((...` cannot blow the call stack.
+    SeekRows parse_seek_rest(int depth);
+    // `sort <table> by <col> [asc|desc]` — sugar over a bare seek that only
+    // orders. Desugared here so the interpreter sees one code path.
+    SeekRows parse_sort();
     ChangeRows parse_change();
     RemoveRows parse_remove();
     SaveDb parse_save();

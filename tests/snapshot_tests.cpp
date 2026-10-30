@@ -262,5 +262,32 @@ void run_snapshot_tests() {
         check(legacy.table_schema("t").column_at(0).unique, "v1 unique flag loads");
     }
 
+    // 6. Temp tables never reach disk; a temp-only db refuses to save.
+    {
+        Engine engine = seeded_bank();
+        engine.create_temp_table("scratch", customer_schema());
+        engine.insert("scratch", {Value::integer(9), Value::text("Tmp"), Value::decimal(1.0),
+                                  Value::boolean(true)});
+        check(engine.is_temp("scratch"), "scratch is temp");
+
+        auto path = temp_path("notemp", ".exd");
+        SnapshotStore::save(engine, "bank", path);
+        std::string text = read_file(path);
+        check(text.find("table scratch") == std::string::npos,
+              "temp table is absent from the snapshot");
+
+        Engine fresh;
+        SnapshotStore::load(fresh, path);
+        check_bank(fresh, "data tables reload without the temp");
+        check(!fresh.has_table("scratch"), "temp table stays behind on reload");
+
+        Engine only_temp;
+        only_temp.create_database("tmp");
+        only_temp.harness_database("tmp");
+        only_temp.create_temp_table("t", customer_schema());
+        check_throws_snapshot([&] { SnapshotStore::save(only_temp, "tmp", temp_path("x", ".exd")); },
+                              "temp-only database refuses to save");
+    }
+
     std::cout << "All snapshot tests passed.\n";
 }

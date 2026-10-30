@@ -193,3 +193,13 @@ Do not continue to Lesson 7 until you can explain:
 - why `and_with_next` defaults to `and` and lives on the earlier condition
 - why arithmetic `set` names its source column explicitly
 - why `parse_one` rejects trailing tokens after the first `;`
+
+## Afterword: sort sugar and short directions (added later)
+
+- `sort <table> by <col> [asc|desc]` desugars in the parser to an ordered
+  seek, so the interpreter keeps one code path. No direction means
+  ascending — and bare `order by <col>` in a seek means ascending too
+  (bare `order by` used to sort nothing at all, which surprised everyone).
+- `asc`/`desc` work everywhere `ascending`/`descending` do, including
+  `order by`. Only `sort` accepts the bare table position; every other
+  clause keeps its grammar.

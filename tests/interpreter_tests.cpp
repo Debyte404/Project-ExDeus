@@ -469,5 +469,86 @@ void run_interpreter_tests() {
         check(!ec, "relative test dir cleans up");
     }
 
+    // 16. `into` stashes the answer as a queryable temp table.
+    {
+        Interpreter db;
+        run_script(db, "create db s; harness s;"
+                       "forge table customers with id: integer beelzebub, name: text, balance: decimal;"
+                       "add customers (1, \"Asha\", 25000.50);"
+                       "add customers (2, \"Ravi\", 12000.00);");
+        Result stashed = run(db, "seek customers show name, balance into rich;");
+        check(stashed.message == "seek customers into rich: 2 rows",
+              "into reports the temp table");
+        check(db.engine().is_temp("rich"), "into table is temp");
+        Result again = run(db, "seek rich;");
+        check(again.table->columns.size() == 2 && again.table->rows.size() == 2,
+              "temp table queries like a real one");
+        check(again.table->rows[0][0] == Value::text("Asha"),
+              "temp table keeps row order and values");
+        check_fails([&] { run(db, "seek customers into rich;"); },
+                    "second into refuses to clobber");
+
+        // Empty answers still build a usable temp table.
+        Result empty = run(db, "seek customers where id equals 99 into ghosts;");
+        check(empty.table->rows.empty(), "empty into holds no rows");
+        check(db.engine().row_count("ghosts") == 0, "empty temp queries clean");
+    }
+
+    // 17. Parenthesized subqueries read like tables.
+    {
+        Interpreter db;
+        run_script(db, "create db s; harness s;"
+                       "forge table customers with id: integer beelzebub, name: text, balance: decimal;"
+                       "add customers (1, \"Asha\", 25000.50);"
+                       "add customers (2, \"Ravi\", 12000.00);"
+                       "add customers (3, \"Mira\", 8000.25);");
+        Result sub = run(db, "seek (seek customers show name, balance where balance above 10000) show name order by name;");
+        check(sub.table->columns.size() == 1 && sub.table->columns[0] == "name",
+              "subquery exposes its display columns");
+        check(sub.table->rows.size() == 2 &&
+                  sub.table->rows[0][0] == Value::text("Asha") &&
+                  sub.table->rows[1][0] == Value::text("Ravi"),
+              "outer filters and orders the inner answer");
+        check(sub.message == "seek (subquery): 2 rows", "subquery labels itself");
+
+        // Subquery feeding a join, then into for reuse.
+        Result combo = run(db,
+                           "seek (seek customers show id, name) inner join customers on (subquery).id equals customers.id "
+                           "show name into doubled;");
+        check(combo.table->rows.size() == 3, "subquery joins like a table");
+        check(db.engine().is_temp("doubled"), "subquery answer stashes into temp");
+    }
+
+    // 18. `sort` orders ascending by default, desc on request.
+    {
+        Interpreter db;
+        run_script(db, "create db s; harness s;"
+                       "forge table customers with id: integer beelzebub, name: text;"
+                       "add customers (1, \"Ravi\");"
+                       "add customers (2, \"Asha\");"
+                       "add customers (3, \"Mira\");");
+        Result sorted = run(db, "sort customers by name;");
+        check(sorted.table->rows[0][1] == Value::text("Asha") &&
+                  sorted.table->rows[2][1] == Value::text("Ravi"),
+              "sort defaults to ascending");
+        check(sorted.message == "seek customers: 3 rows", "sort reports like a seek");
+
+        Result down = run(db, "sort customers by name desc;");
+        check(down.table->rows[0][1] == Value::text("Ravi") &&
+                  down.table->rows[2][1] == Value::text("Asha"),
+              "sort desc goes Z-first");
+
+        Result bare = run(db, "seek customers show name order by name;");
+        check(bare.table->rows[0][0] == Value::text("Asha"),
+              "bare order by now sorts ascending too");
+
+        Result kept = run(db, "sort customers by name into ordered;");
+        check(db.engine().is_temp("ordered"), "sort supports into");
+        check_fails([&] { run(db, "sort missing by name;"); },
+                    "sort of an unknown table fails");
+        check_fails([&] { run(db, "sort customers by missing;"); },
+                    "sort on an unknown column fails");
+    }
+
     std::cout << "All interpreter tests passed.\n";
 }

@@ -24,6 +24,8 @@ const std::unordered_map<std::string, TokenKind>& keywords() {
         {"with", TokenKind::KwWith},       {"order", TokenKind::KwOrder},
         {"by", TokenKind::KwBy},           {"ascending", TokenKind::KwAscending},
         {"descending", TokenKind::KwDescending},
+        {"asc", TokenKind::KwAsc},         {"desc", TokenKind::KwDesc},
+        {"sort", TokenKind::KwSort},
         {"and", TokenKind::KwAnd},         {"or", TokenKind::KwOr},
         {"equals", TokenKind::KwEquals},   {"above", TokenKind::KwAbove},
         {"below", TokenKind::KwBelow},     {"plus", TokenKind::KwPlus},
@@ -35,7 +37,7 @@ const std::unordered_map<std::string, TokenKind>& keywords() {
         {"integer", TokenKind::KwInteger}, {"decimal", TokenKind::KwDecimal},
         {"text", TokenKind::KwText},       {"boolean", TokenKind::KwBoolean},
         {"inner", TokenKind::KwInner},     {"join", TokenKind::KwJoin},
-        {"on", TokenKind::KwOn},
+        {"on", TokenKind::KwOn},           {"into", TokenKind::KwInto},
         {"true", TokenKind::BoolLit},      {"false", TokenKind::BoolLit},
         {"null", TokenKind::NullLit},
     };
@@ -77,6 +79,9 @@ const char* to_string(TokenKind kind) {
         case TokenKind::KwBy: return "by";
         case TokenKind::KwAscending: return "ascending";
         case TokenKind::KwDescending: return "descending";
+        case TokenKind::KwAsc: return "asc";
+        case TokenKind::KwDesc: return "desc";
+        case TokenKind::KwSort: return "sort";
         case TokenKind::KwAnd: return "and";
         case TokenKind::KwOr: return "or";
         case TokenKind::KwEquals: return "equals";
@@ -97,6 +102,7 @@ const char* to_string(TokenKind kind) {
         case TokenKind::KwInner: return "inner";
         case TokenKind::KwJoin: return "join";
         case TokenKind::KwOn: return "on";
+        case TokenKind::KwInto: return "into";
         case TokenKind::IntegerLit: return "integer literal";
         case TokenKind::DecimalLit: return "decimal literal";
         case TokenKind::StringLit: return "string literal";
@@ -181,12 +187,15 @@ void Lexer::skip_whitespace() {
 }
 
 [[noreturn]] void Lexer::fail(const std::string& message) const {
-    throw LexerError("line " + std::to_string(line_) + ", column " +
-                     std::to_string(column_) + ": " + message);
+    Position here{line_, column_};
+    throw LexerError("line " + std::to_string(here.line) + ", column " +
+                     std::to_string(here.column) + ": " + message,
+                     here);
 }
 
 Token Lexer::make_token(TokenKind kind, const std::string& lexeme, Position start) const {
-    return Token{kind, lexeme, start, std::nullopt};
+    Token token{kind, lexeme, start, Position{line_, column_}, std::nullopt};
+    return token;
 }
 
 void Lexer::scan_string() {
@@ -212,7 +221,8 @@ void Lexer::scan_string() {
     }
     if (at_end()) {
         throw LexerError("line " + std::to_string(start.line) + ", column " +
-                         std::to_string(start.column) + ": unterminated string");
+                         std::to_string(start.column) + ": unterminated string",
+                         start);
     }
     advance();  // closing quote
     Token token = make_token(TokenKind::StringLit, value, start);
@@ -339,7 +349,8 @@ std::vector<Token> Lexer::tokenize() {
                 } else {
                     throw LexerError("line " + std::to_string(start.line) + ", column " +
                                      std::to_string(start.column) + ": unexpected character '" +
-                                     c + "'");
+                                     c + "'",
+                                     start);
                 }
                 break;
         }

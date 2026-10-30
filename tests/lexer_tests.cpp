@@ -169,6 +169,25 @@ void run_lexer_tests() {
         check(at(short_join, 0).kind == TokenKind::KwJoin, "join works without inner");
     }
 
+    // 11. `into` lexes as a keyword.
+    {
+        auto tokens = lex("seek t show a into tmp;");
+        check(at(tokens, 4).kind == TokenKind::KwInto, "into lexes as keyword");
+    }
+
+    // 12. `sort`, `asc`, and `desc` lex as keywords.
+    {
+        auto tokens = lex("sort t by balance desc;");
+        check(at(tokens, 0).kind == TokenKind::KwSort, "sort lexes as keyword");
+        check(at(tokens, 4).kind == TokenKind::KwDesc, "desc lexes as keyword");
+
+        auto ascending = lex("sort t by balance asc;");
+        check(at(ascending, 4).kind == TokenKind::KwAsc, "asc lexes as keyword");
+
+        auto longs = lex("order by balance ascending;");
+        check(at(longs, 3).kind == TokenKind::KwAscending, "ascending still lexes");
+    }
+
     // 9. Unknown escapes keep the backslash (Windows paths survive the lexer).
     {
         auto kept = lex("\"a\\qb\"");

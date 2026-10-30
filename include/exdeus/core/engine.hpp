@@ -34,9 +34,14 @@ public:
 
     // Tables in the selected database.
     void create_table(const std::string& table, Schema schema);
+    // Session-temp tables (from `seek ... into`): queryable like any table
+    // but invisible to snapshots, so they never reach disk.
+    void create_temp_table(const std::string& table, Schema schema);
+    bool is_temp(const std::string& table) const;
     void drop_table(const std::string& table);
     void rename_table(const std::string& old_name, const std::string& new_name);
     std::vector<std::string> list_tables() const;
+    bool has_table(const std::string& table) const;
     const Table& table(const std::string& table) const;
     Schema table_schema(const std::string& table) const;
 

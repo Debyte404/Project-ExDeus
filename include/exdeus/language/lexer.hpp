@@ -9,10 +9,16 @@
 namespace exdeus::language {
 
 // Named failure: unexpected character or unterminated string, always with
-// a 1-based line and column.
+// a 1-based line and column. Carries the position structurally (for the
+// REPL caret) as well as inside the message (for logs and tests).
 class LexerError : public std::runtime_error {
 public:
-    using std::runtime_error::runtime_error;
+    LexerError(const std::string& message, Position position)
+        : std::runtime_error(message), position_(position) {}
+    Position position() const { return position_; }
+
+private:
+    Position position_{1, 1};
 };
 
 // Single-pass scanner: consumed left to right with one char of lookahead.

@@ -17,6 +17,7 @@ add_library(exdeus_core
     src/language/lexer.cpp
     src/language/parser.cpp
     src/repl/interpreter.cpp
+    src/repl/highlight.cpp
     src/io/snapshot_store.cpp
     src/io/csv_exporter.cpp
 )
@@ -40,6 +41,7 @@ add_executable(exdeus_tests
     tests/table_tests.cpp
     tests/engine_tests.cpp
     tests/interpreter_tests.cpp
+    tests/highlight_tests.cpp
     tests/snapshot_tests.cpp
     tests/end_to_end_tests.cpp
 )

@@ -1,6 +1,7 @@
 // Lesson 6 implementation: recursive-descent ExdeusQL parser.
 #include "exdeus/language/parser.hpp"
 
+#include <memory>
 #include <utility>
 #include <variant>
 
@@ -10,7 +11,7 @@ Parser::Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {
     if (tokens_.empty() ||
         tokens_.back().kind != TokenKind::EndOfInput) {
         tokens_.push_back(
-            Token{TokenKind::EndOfInput, "", Position{}, std::nullopt});
+            Token{TokenKind::EndOfInput, "", Position{}, Position{}, std::nullopt});
     }
 }
 
@@ -54,14 +55,16 @@ const Token& Parser::expect(TokenKind kind, const std::string& what) {
 [[noreturn]] void Parser::fail(const Token& token, const std::string& expected) const {
     throw ParserError("line " + std::to_string(token.position.line) + ", column " +
                       std::to_string(token.position.column) + ": expected " + expected +
-                      ", found '" + token.lexeme + "' (" + to_string(token.kind) + ")");
+                      ", found '" + token.lexeme + "' (" + to_string(token.kind) + ")",
+                      token.position);
 }
 
 [[noreturn]] void Parser::fail_at_end(const std::string& expected) const {
     const Token& end = peek();
     throw ParserError("line " + std::to_string(end.position.line) + ", column " +
                       std::to_string(end.position.column) + ": expected " + expected +
-                      ", found end of input");
+                      ", found end of input",
+                      end.position);
 }
 
 std::string Parser::expect_name(const std::string& what) {
@@ -130,6 +133,7 @@ Command Parser::parse_command() {
         case TokenKind::KwForge: return parse_forge();
         case TokenKind::KwAdd: return parse_add();
         case TokenKind::KwSeek: return parse_seek();
+        case TokenKind::KwSort: return parse_sort();
         case TokenKind::KwChange: return parse_change();
         case TokenKind::KwRemove: return parse_remove();
         case TokenKind::KwSave: return parse_save();
@@ -137,7 +141,7 @@ Command Parser::parse_command() {
         case TokenKind::KwExport: return parse_export();
         default: break;
     }
-    fail(peek(), "a command (create, harness, forge, add, seek, change, remove, save, load, export)");
+    fail(peek(), "a command (create, harness, forge, add, seek, sort, change, remove, save, load, export)");
 }
 
 CreateDb Parser::parse_create() {
@@ -302,7 +306,26 @@ AddRow Parser::parse_add() {
 
 SeekRows Parser::parse_seek() {
     expect(TokenKind::KwSeek, "'seek'");
-    SeekRows command{expect_name("a table name"), {}, std::nullopt, {}, "", SortDirection::None};
+    return parse_seek_rest(0);
+}
+
+SeekRows Parser::parse_seek_rest(int depth) {
+    SeekRows command{
+        "", nullptr, {}, std::nullopt, {}, "", SortDirection::None, std::nullopt};
+    // FROM: a table name, or a parenthesized subquery for visibility:
+    // `seek (seek customers show id) show id`.
+    if (check(TokenKind::LParen)) {
+        if (depth >= 8) {
+            fail(peek(), "subqueries nested too deep (max 8)");
+        }
+        advance();  // consume '('
+        expect(TokenKind::KwSeek, "'seek'");
+        command.from_query =
+            std::make_shared<SeekRows>(parse_seek_rest(depth + 1));
+        expect(TokenKind::RParen, "')'");
+    } else {
+        command.table = expect_name("a table name");
+    }
     // `show` can appear before or after the join clause.
     if (check(TokenKind::KwShow)) {
         advance();
@@ -321,13 +344,43 @@ SeekRows Parser::parse_seek() {
         advance();
         expect(TokenKind::KwBy, "'by'");
         command.order_by = expect_column("a column name");
-        if (check(TokenKind::KwAscending)) {
+        // Bare `order by <col>` sorts ascending; the shorts work too.
+        command.direction = SortDirection::Ascending;
+        if (check(TokenKind::KwAscending) || check(TokenKind::KwAsc)) {
             advance();
             command.direction = SortDirection::Ascending;
-        } else if (check(TokenKind::KwDescending)) {
+        } else if (check(TokenKind::KwDescending) || check(TokenKind::KwDesc)) {
             advance();
             command.direction = SortDirection::Descending;
         }
+    }
+    // `into` comes last: `seek t show a into tmp;`
+    if (check(TokenKind::KwInto)) {
+        advance();
+        command.into_table = expect_name("a table name for into");
+    }
+    return command;
+}
+
+SeekRows Parser::parse_sort() {
+    expect(TokenKind::KwSort, "'sort'");
+    SeekRows command{
+        "", nullptr, {}, std::nullopt, {}, "", SortDirection::None, std::nullopt};
+    command.table = expect_name("a table name");
+    expect(TokenKind::KwBy, "'by'");
+    command.order_by = expect_column("a column name");
+    // Ascending unless stated otherwise.
+    command.direction = SortDirection::Ascending;
+    if (check(TokenKind::KwAscending) || check(TokenKind::KwAsc)) {
+        advance();
+        command.direction = SortDirection::Ascending;
+    } else if (check(TokenKind::KwDescending) || check(TokenKind::KwDesc)) {
+        advance();
+        command.direction = SortDirection::Descending;
+    }
+    if (check(TokenKind::KwInto)) {
+        advance();
+        command.into_table = expect_name("a table name for into");
     }
     return command;
 }
@@ -354,7 +407,23 @@ std::optional<JoinClause> Parser::parse_join() {
     advance();  // consume 'join'
     JoinClause clause{expect_name("a table name"), "", ""};
     expect(TokenKind::KwOn, "'on'");
-    clause.left = expect_column("a qualified column (e.g. customers.id)");
+    // Join sides are qualified (`t.col`) so shared names stay unambiguous.
+    // A subquery source addresses its columns as `(subquery).col`.
+    auto join_side = [this](const char* example) {
+        if (check(TokenKind::LParen)) {
+            advance();
+            std::string scope = expect_name("a subquery scope");
+            if (scope != "subquery") {
+                fail(tokens_[cursor_ - 1],
+                     "'(subquery).<column>' — parens only wrap subqueries here");
+            }
+            expect(TokenKind::RParen, "')'");
+            expect(TokenKind::Dot, "'.'");
+            return "(subquery)." + expect_name("a column name");
+        }
+        return expect_column(example);
+    };
+    clause.left = join_side("a qualified column (e.g. customers.id)");
     if (clause.left.find('.') == std::string::npos) {
         fail(tokens_[cursor_ - 1],
              "a qualified column (e.g. customers.id) — bare names are ambiguous in joins");
@@ -368,7 +437,7 @@ std::optional<JoinClause> Parser::parse_join() {
         default:
             fail(peek(), "'equals' (or '==' / '=')");
     }
-    clause.right = expect_column("a qualified column (e.g. accounts.customer_id)");
+    clause.right = join_side("a qualified column (e.g. accounts.customer_id)");
     if (clause.right.find('.') == std::string::npos) {
         fail(tokens_[cursor_ - 1],
              "a qualified column (e.g. accounts.customer_id) — bare names are ambiguous in joins");

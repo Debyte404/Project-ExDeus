@@ -560,7 +560,14 @@ void SnapshotStore::save(const Engine& engine, const std::string& database,
     std::ostringstream out;
     out << "EXDEUS_SNAPSHOT " << kVersion << "\n";
     out << "database " << database << "\n";
+    size_t saved_tables = 0;
     for (const std::string& table_name : engine.list_tables()) {
+        // Temp tables (`seek ... into`) are session scratch: they never
+        // reach disk, so a reload starts clean.
+        if (engine.is_temp(table_name)) {
+            continue;
+        }
+        ++saved_tables;
         const Schema schema = engine.table_schema(table_name);
         out << "table " << table_name << " " << schema.column_count() << "\n";
         for (const Column& column : schema.columns()) {
@@ -601,6 +608,10 @@ void SnapshotStore::save(const Engine& engine, const std::string& database,
             }
             out << "\n";
         }
+    }
+    if (saved_tables == 0 && !engine.list_tables().empty()) {
+        throw SnapshotError("no persistent tables to save: '" + database +
+                            "' holds only temp tables");
     }
     out << "end database " << database << "\n";
 

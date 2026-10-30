@@ -5,6 +5,7 @@ void run_table_tests();
 void run_engine_tests();
 void run_lexer_tests();
 void run_parser_tests();
+void run_highlight_tests();
 void run_interpreter_tests();
 void run_snapshot_tests();
 void run_end_to_end_tests();
@@ -16,6 +17,7 @@ int main() {
     run_engine_tests();
     run_lexer_tests();
     run_parser_tests();
+    run_highlight_tests();
     run_interpreter_tests();
     run_snapshot_tests();
     run_end_to_end_tests();
