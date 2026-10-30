@@ -163,7 +163,14 @@ void Lexer::skip_whitespace() {
         if (c == ' ' || c == '\r' || c == '\t' || c == '\n') {
             advance();
         } else if (c == '-' && peek_next() == '-') {
-            // Line comment to end of line.
+            // Line comment to end of line: `-- like this`.
+            while (!at_end() && peek() != '\n') {
+                advance();
+            }
+        } else if (c == '#') {
+            // Line comment to end of line: `# like this`. Same rule as `--`;
+            // `#` inside a quoted string is still string content (scan_string
+            // consumes it before skip_whitespace ever sees it).
             while (!at_end() && peek() != '\n') {
                 advance();
             }

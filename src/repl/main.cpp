@@ -126,22 +126,34 @@ void print_banner() {
 }
 
 void print_help() {
-    std::cout << "ExdeusQL commands (end every command with `;`):\n"
-              << "  create db <name>;                 create a database\n"
-              << "  harness <name>;                   select a database\n"
-              << "  forge table <t> with id: integer beelzebub, n: text not null;  create a table\n"
-              << "    beelzebub = primary key (one per table); also: unique, null (nullable),\n"
-              << "    check above 0, references parent(col)\n"
-              << "  add <t> (1, \"Asha\");             insert a row\n"
-              << "  seek <t> [show * | show a, b] [inner join <t2> on <t1.a> equals <t2.b>]\n"
-              << "          [where a above 1] [order by a];\n"
-              << "  change <t> set a to 2 [where ...];\n"
-              << "  remove <t> [where ...];\n"
-              << "  save db to \"f.exd\";  load db from \"f.exd\";   save/load a snapshot\n"
-              << "    paths are relative to where you launched exdeus; reply shows the full path\n"
-              << "    use forward slashes (\"dir/f.exd\") — \\n and \\t are string escapes\n"
-              << "  export <t> to \"f.csv\";            export a table as CSV\n"
-              << "REPL commands: help, banner, quit\n";
+    // One color per job so the eye can scan: examples YELLOW, notes DIM,
+    // comments MAGENTA (nothing else uses it), REPL verbs BRIGHT_CYAN.
+    std::cout << BOLD << "ExdeusQL" << RESET << " commands (end every command with "
+              << BOLD << ";" << RESET << "):\n"
+              << "  " << YELLOW << "create db <name>;" << RESET
+              << "                 create a database\n"
+              << "  " << YELLOW << "harness <name>;" << RESET
+              << "                   select a database\n"
+              << "  " << YELLOW << "forge table <t> with id: integer beelzebub, n: text not null;" << RESET << "\n"
+              << "    " << DIM << "beelzebub = primary key (one per table); also: unique, null (nullable)," << RESET << "\n"
+              << "    " << DIM << "check above 0, references parent(col)" << RESET << "\n"
+              << "  " << YELLOW << "add <t> (1, \"Asha\");" << RESET
+              << "             insert a row\n"
+              << "  " << YELLOW << "seek <t> [show * | show a, b] [inner join <t2> on <t1.a> equals <t2.b>]" << RESET << "\n"
+              << "          " << YELLOW << "[where a above 1] [order by a];" << RESET << "\n"
+              << "  " << YELLOW << "change <t> set a to 2 [where ...];" << RESET << "\n"
+              << "  " << YELLOW << "remove <t> [where ...];" << RESET << "\n"
+              << "  " << YELLOW << "save db to \"f.exd\";" << RESET << "  "
+              << YELLOW << "load db from \"f.exd\";" << RESET << "   save/load a snapshot\n"
+              << "    " << DIM << "paths are relative to where you launched exdeus; reply shows the full path" << RESET << "\n"
+              << "    " << DIM << "use forward slashes (\"dir/f.exd\") - \\n and \\t are string escapes" << RESET << "\n"
+              << "  " << YELLOW << "export <t> to \"f.csv\";" << RESET
+              << "            export a table as CSV\n"
+              << "  " << MAGENTA << "# like this, or -- like this" << RESET
+              << "        comments (both run to end of line)\n"
+              << "REPL commands: " << BRIGHT_CYAN << "help" << RESET << ", "
+              << BRIGHT_CYAN << "banner" << RESET << ", "
+              << BRIGHT_CYAN << "quit" << RESET << "\n";
 }
 
 void print_table(const ResultTable& table) {

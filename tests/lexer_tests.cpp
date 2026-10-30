@@ -195,5 +195,23 @@ void run_lexer_tests() {
         check(at(forge, 7).kind == TokenKind::KwBeelzebub, "beelzebub survives a forge header");
     }
 
+    // 10. `#` comments work exactly like `--` comments.
+    {
+        auto tokens = lex("create db bank;\n# pick it\nharness bank;");
+        check(at(tokens, 4).kind == TokenKind::KwHarness, "hash comment line is skipped");
+        check(at(tokens, 4).position.line == 3 && at(tokens, 4).position.column == 1,
+              "token after hash comment lands on line 3");
+
+        auto tight = lex("#comment without space\nseek t;");
+        check(at(tight, 0).kind == TokenKind::KwSeek, "hash comment needs no space");
+
+        auto mixed = lex("-- dash comment\n# hash comment\nseek t;");
+        check(at(mixed, 0).kind == TokenKind::KwSeek, "both comment styles mix freely");
+
+        auto in_string = lex("add t (\"a#b\");");
+        check(at(in_string, 3).kind == TokenKind::StringLit, "hash inside a string stays a string");
+        check(at(in_string, 3).lexeme == "a#b", "string keeps its hash");
+    }
+
     std::cout << "All lexer tests passed.\n";
 }

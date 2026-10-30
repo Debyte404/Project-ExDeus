@@ -1,6 +1,7 @@
 -- ExdeusQL starter bank: customers, accounts, and transactions.
 -- Run it with:  Get-Content examples/bank.exql | .\build\Debug\exdeus.exe
 -- Every command ends with `;`; blocks may span lines.
+# Hash comments work too — both kinds run to end of line.
 
 create db bank;
 harness bank;

@@ -105,10 +105,13 @@ record their `start` before consuming; `scan_string`/`scan_number`/
 and two-character operators; a lone `!` fails.
 
 `scan_string` decodes `\n`, `\t`, `\"`, `\\` and throws with the opening
-quote's position on unterminated input. `scan_number` accepts digits with
+quote's position on unterminated input. Any other `\x` keeps its backslash
+(`\q` stays two chars) so Windows paths like `dir\file.exd` survive lexing —
+only `\n` and `\t` are truly special, which is why paths containing those
+sequences still need forward slashes. `scan_number` accepts digits with
 exactly one optional `.fraction` — `25000.50` is a decimal, `25000.` stays
-an integer `25000` plus punctuation. `skip_whitespace` also eats `--`
-comments to end of line.
+an integer `25000` plus punctuation. `skip_whitespace` eats `--` and `#`
+comments to end of line (`#` inside a quoted string stays string content).
 
 Error positions point at the offending character: the `default` branch
 throws with the pre-`advance()` `start`, not the post-advance cursor, so
@@ -129,6 +132,8 @@ seek/show/where/above/order/by/descending lex as keywords
 string escapes decode; = == != < <= > >= lex as distinct operators
 comment lines are skipped; tokens after them land on the right line
 bad character error carries line and column; unterminated string throws; lone ! throws
+hash comments work like dash comments; hash inside strings stays a string
+unknown escapes keep the backslash; single-backslash paths survive lexing
 ```
 
 Every check inspects only the returned `std::vector<Token>`: kinds,
