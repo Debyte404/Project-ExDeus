@@ -46,3 +46,10 @@ add_executable(exdeus_tests
 target_link_libraries(exdeus_tests PRIVATE exdeus_core)
 
 add_test(NAME exdeus_tests COMMAND exdeus_tests)
+
+# Stable install: `cmake --install build --config Release --prefix <dir>`
+# drops exdeus(.exe) into <dir>/bin so one PATH entry serves every shell.
+include(GNUInstallDirs)
+install(TARGETS exdeus RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY examples/ DESTINATION ${CMAKE_INSTALL_DATADIR}/exdeus/examples
+        FILES_MATCHING PATTERN "*.exql")
