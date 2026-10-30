@@ -5,6 +5,11 @@
 *.pdb
 *.ilk
 
+# Local install outputs (cmake --install --prefix .): the on-PATH copy.
+# Refresh with: cmake --build build --config Release && cmake --install build --config Release --prefix .
+/bin/
+/share/
+
 # Local playground: private experiments, never pushed to GitHub.
 /playground/
 
