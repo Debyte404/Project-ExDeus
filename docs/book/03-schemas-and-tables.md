@@ -181,3 +181,14 @@ Do not continue to Lesson 4 until you can explain:
 - why `select` returns indexes instead of row copies
 - why `add_column` and `remove_column` must change the schema and every row together
 - why `Table` depends on `Schema` and `Value`, but neither may depend on `Table`
+
+## Afterword: alter table (added later)
+
+`alter table <t> add <c>: <type> [constraints...] [default <lit>]` and
+`alter table <t> remove <c>` expose the two methods above as ExdeusQL —
+until then, only `forge` could shape a table. Added columns fill existing
+rows with the default (or null when nullable); a required column without an
+explicit default fails instead of inventing values. Removes shrink every
+row together, refuse the last column, and refuse parent columns that live
+foreign keys still point at. See Lesson 12 for the constraints an
+altered-in column can carry.

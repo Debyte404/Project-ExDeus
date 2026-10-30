@@ -373,6 +373,23 @@ void Engine::add_column(const std::string& table, Column column, Value default_v
 void Engine::remove_column(const std::string& table, const std::string& column) {
     const std::string& db = require_selection();
     try {
+        // Restrict: a referenced parent column cannot be dropped while
+        // children point at it. Child-side FK columns drop freely — the
+        // constraint leaves with the column.
+        for (const std::string& child_name : catalog_.list_tables(db)) {
+            if (child_name == table) {
+                continue;
+            }
+            const Table& child = catalog_.table(db, child_name);
+            for (const Column& child_col : child.schema().columns()) {
+                if (child_col.references && child_col.references->table == table &&
+                    child_col.references->column == column) {
+                    throw EngineError("foreign key violation: cannot remove " + table + "." +
+                                      column + " while " + child_name + "." + child_col.name +
+                                      " references it");
+                }
+            }
+        }
         catalog_.mutable_table(db, table).remove_column(column);
     } catch (const CatalogError& e) {
         throw EngineError(e.what());

@@ -51,6 +51,8 @@ const char* color_for(TokenKind kind) {
         case TokenKind::KwAsc:
         case TokenKind::KwDesc:
         case TokenKind::KwSort:
+        case TokenKind::KwAlter:
+        case TokenKind::KwDefault:
         case TokenKind::KwAnd:
         case TokenKind::KwOr:
         case TokenKind::KwEquals:

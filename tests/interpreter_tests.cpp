@@ -550,5 +550,60 @@ void run_interpreter_tests() {
                     "sort on an unknown column fails");
     }
 
+    // 19. `alter table` evolves the schema without losing rows.
+    {
+        Interpreter db;
+        run_script(db, "create db s; harness s;"
+                       "forge table customers with id: integer beelzebub, name: text not null;"
+                       "add customers (1, \"Asha\");"
+                       "add customers (2, \"Ravi\");");
+
+        // Nullable add fills existing rows with null.
+        Result added = run(db, "alter table customers add nickname: text null;");
+        check(added.message == "added column nickname to customers",
+              "alter add reports the column");
+        Result grown = run(db, "seek customers;");
+        check(grown.table->columns.size() == 3, "new column appears in seeks");
+        check(grown.table->rows[0].size() == 3 &&
+                  grown.table->rows[0][2].type() == exdeus::core::ValueType::Null,
+              "existing rows gain nulls");
+
+        // Required add needs an explicit default; it must typecheck.
+        check_fails([&] { run(db, "alter table customers add age: integer not null;"); },
+                    "required add without default fails");
+        run(db, "alter table customers add age: integer not null default 0;");
+        Result filled = run(db, "seek customers show age;");
+        check(filled.table->rows[0][0] == Value::integer(0),
+              "existing rows gain the default");
+        check_fails([&] { run(db, "alter table customers add bad: integer default \"x\";"); },
+                    "wrong-type default fails");
+
+        // Checks ride along on alter-add.
+        run(db, "alter table customers add score: integer null check above 0;");
+        check_fails([&] { run(db, "alter table customers add neg: integer default 0 check above 0;"); },
+                    "violating default fails the check");
+
+        // Remove drops the column and shrinks every row.
+        Result removed = run(db, "alter table customers remove nickname;");
+        check(removed.message == "removed column nickname from customers",
+              "alter remove reports the column");
+        Result shrunk = run(db, "seek customers;");
+        check(shrunk.table->columns.size() == 4, "removed column is gone from seeks");
+        check_fails([&] { run(db, "alter table customers remove missing;"); },
+                    "remove of an unknown column fails");
+
+        // Guards: last column stays, referenced parents stay.
+        run_script(db, "forge table solo with only: integer;");
+        check_fails([&] { run(db, "alter table solo remove only;"); },
+                    "last column cannot be removed");
+        run_script(db, "forge table accounts with id: integer beelzebub, customer_id: integer not null references customers(id);"
+                       "add accounts (101, 1);");
+        check_fails([&] { run(db, "alter table customers remove id;"); },
+                    "referenced parent column cannot be removed");
+        run(db, "alter table accounts remove customer_id;");
+        check(db.engine().table_schema("accounts").column_count() == 1,
+              "child-side FK column removes cleanly");
+    }
+
     std::cout << "All interpreter tests passed.\n";
 }

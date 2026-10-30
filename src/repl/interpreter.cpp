@@ -28,8 +28,39 @@ using exdeus::core::Table;
 using exdeus::core::Value;
 using exdeus::core::ValueType;
 using exdeus::language::Assignment;
+using exdeus::language::ColumnDef;
 using exdeus::language::Condition;
 using exdeus::language::FilterOp;
+
+// Shared by forge and alter-add: ColumnDef (parser shape) becomes Column
+// (engine shape), translating check operators across the boundary.
+Column column_from_def(const ColumnDef& def) {
+    Column column;
+    column.name = def.name;
+    column.type = def.type;
+    column.required = def.required_flag;
+    column.unique = def.unique;
+    column.is_primary = def.is_primary;
+    for (const auto& check : def.checks) {
+        CheckOp mapped = CheckOp::Equals;
+        switch (check.op) {
+            case FilterOp::Equals:
+                mapped = CheckOp::Equals;
+                break;
+            case FilterOp::Above:
+                mapped = CheckOp::Above;
+                break;
+            case FilterOp::Below:
+                mapped = CheckOp::Below;
+                break;
+        }
+        column.checks.push_back(CheckConstraint{mapped, check.literal});
+    }
+    if (def.references) {
+        column.references = ForeignRef{def.references->table, def.references->column};
+    }
+    return column;
+}
 
 bool is_number(const Value& value) {
     return value.type() == ValueType::Integer || value.type() == ValueType::Decimal;
@@ -222,6 +253,10 @@ Result Interpreter::execute(const exdeus::language::Command& command) {
                 return run_add(active);
             } else if constexpr (std::is_same_v<T, exdeus::language::SeekRows>) {
                 return run_seek(active);
+            } else if constexpr (std::is_same_v<T, exdeus::language::AlterAdd>) {
+                return run_alter_add(active);
+            } else if constexpr (std::is_same_v<T, exdeus::language::AlterRemove>) {
+                return run_alter_remove(active);
             } else if constexpr (std::is_same_v<T, exdeus::language::ChangeRows>) {
                 return run_change(active);
             } else if constexpr (std::is_same_v<T, exdeus::language::RemoveRows>) {
@@ -259,35 +294,32 @@ Result Interpreter::run_harness(const exdeus::language::HarnessDb& command) {
 Result Interpreter::run_forge(const exdeus::language::ForgeTable& command) {
     std::vector<Column> columns;
     for (const auto& def : command.columns) {
-        Column column;
-        column.name = def.name;
-        column.type = def.type;
-        column.required = def.required_flag;
-        column.unique = def.unique;
-        column.is_primary = def.is_primary;
-        for (const auto& check : def.checks) {
-            CheckOp mapped = CheckOp::Equals;
-            switch (check.op) {
-                case exdeus::language::FilterOp::Equals:
-                    mapped = CheckOp::Equals;
-                    break;
-                case exdeus::language::FilterOp::Above:
-                    mapped = CheckOp::Above;
-                    break;
-                case exdeus::language::FilterOp::Below:
-                    mapped = CheckOp::Below;
-                    break;
-            }
-            column.checks.push_back(CheckConstraint{mapped, check.literal});
-        }
-        if (def.references) {
-            column.references =
-                ForeignRef{def.references->table, def.references->column};
-        }
-        columns.push_back(std::move(column));
+        columns.push_back(column_from_def(def));
     }
     engine_.create_table(command.table, Schema(std::move(columns)));
     return Result{"forged table " + command.table, std::nullopt};
+}
+
+Result Interpreter::run_alter_add(const exdeus::language::AlterAdd& command) {
+    Column column = column_from_def(command.column);
+    Value fill = command.has_default ? command.default_value : Value::null();
+    try {
+        engine_.add_column(command.table, std::move(column), std::move(fill));
+    } catch (const std::exception& e) {
+        throw InterpreterError(e.what());
+    }
+    return Result{"added column " + command.column.name + " to " + command.table,
+                  std::nullopt};
+}
+
+Result Interpreter::run_alter_remove(const exdeus::language::AlterRemove& command) {
+    try {
+        engine_.remove_column(command.table, command.column);
+    } catch (const std::exception& e) {
+        throw InterpreterError(e.what());
+    }
+    return Result{"removed column " + command.column + " from " + command.table,
+                  std::nullopt};
 }
 
 Result Interpreter::run_add(const exdeus::language::AddRow& command) {

@@ -43,6 +43,8 @@ enum class TokenKind {
     KwAsc,
     KwDesc,
     KwSort,
+    KwAlter,
+    KwDefault,
     KwAnd,
     KwOr,
     KwEquals,

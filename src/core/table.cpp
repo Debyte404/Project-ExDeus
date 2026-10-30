@@ -145,6 +145,9 @@ void Table::add_column(Column column, Value default_value) {
 
 void Table::remove_column(const std::string& name) {
     size_t column_index = schema_.index_of(name);
+    if (schema_.column_count() == 1) {
+        throw TableError("cannot remove the last column of table: " + name_);
+    }
     schema_.remove_column(name);
     for (Row& row : rows_) {
         row.erase(row.begin() + static_cast<long long>(column_index));

@@ -355,5 +355,36 @@ void run_parser_tests() {
         check_throws([] { parse_one("sort customers;"); }, "sort without column fails");
     }
 
+    // 13. `alter table` parses add (with optional default) and remove.
+    {
+        const auto& add = as<AlterAdd>(
+            parse_one("alter table customers add nickname: text null;"), "alter add parses");
+        check(add.table == "customers", "alter add keeps the table");
+        check(add.column.name == "nickname", "alter add keeps the column");
+        check(!add.column.required_flag, "nullable marker survives");
+        check(!add.has_default, "no default clause means null fill");
+
+        const auto& add_def = as<AlterAdd>(
+            parse_one("alter table t add age: integer not null default 0;"),
+            "alter add with default parses");
+        check(add_def.has_default, "default clause is recorded");
+        check(add_def.default_value == Value::integer(0), "default value is kept");
+
+        const auto& add_full = as<AlterAdd>(
+            parse_one("alter table t add id2: integer beelzebub;"),
+            "alter add accepts beelzebub");
+        check(add_full.column.is_primary, "beelzebub survives alter add");
+
+        const auto& rem = as<AlterRemove>(
+            parse_one("alter table customers remove nickname;"), "alter remove parses");
+        check(rem.table == "customers", "alter remove keeps the table");
+        check(rem.column == "nickname", "alter remove keeps the column");
+
+        check_throws([] { parse_one("alter table t;"); }, "alter without verb fails");
+        check_throws([] { parse_one("alter table t drop c;"); }, "alter drop is not a verb");
+        check_throws([] { parse_one("alter table t add c: integer default;"); },
+                     "dangling default fails");
+    }
+
     std::cout << "All parser tests passed.\n";
 }

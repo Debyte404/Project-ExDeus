@@ -40,6 +40,9 @@ private:
 //   The <table> may be a parenthesized subquery instead:
 //   seek (seek customers show id) show id;
 //   `sort <table> by <col> [asc|desc]` — sugar over a bare ordered seek.
+//   `alter table <t> add <coldef> [default <lit>]` — new column, existing
+//   rows take the default (or null when nullable).
+//   `alter table <t> remove <col>` — drop a column and its values.
 //   `into` stashes the answer as a session-temp table (never snapshotted).
 //   change <table> set <col> to <expr>, ... [where ...];
 //   remove <table> [where ...];   ("remove <t> where ..." deletes rows;
@@ -83,6 +86,9 @@ private:
     // `sort <table> by <col> [asc|desc]` — sugar over a bare seek that only
     // orders. Desugared here so the interpreter sees one code path.
     SeekRows parse_sort();
+    // `alter table <t> add <coldef> [default <lit>]` and
+    // `alter table <t> remove <col>` — schema evolution.
+    Command parse_alter();
     ChangeRows parse_change();
     RemoveRows parse_remove();
     SaveDb parse_save();

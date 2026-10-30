@@ -124,6 +124,23 @@ struct ChangeRows {
     std::vector<Condition> where;  // empty = all rows
 };
 
+// Schema evolution (the ALTER TABLE alternative):
+// `alter table <t> add <coldef> [default <lit>]` — existing rows take the
+// default (or null when the column is nullable); required columns without
+// an explicit default fail instead of guessing.
+// `alter table <t> remove <col>` — drops the column and its values.
+struct AlterAdd {
+    std::string table;
+    ColumnDef column;
+    bool has_default = false;
+    exdeus::core::Value default_value = exdeus::core::Value::boolean(false);
+};
+
+struct AlterRemove {
+    std::string table;
+    std::string column;
+};
+
 struct RemoveRows {
     std::string table;
     std::vector<Condition> where;  // empty = all rows
@@ -143,6 +160,7 @@ struct ExportTable {
 };
 
 using Command = std::variant<CreateDb, HarnessDb, ForgeTable, AddRow, SeekRows,
-                             ChangeRows, RemoveRows, SaveDb, LoadDb, ExportTable>;
+                             ChangeRows, RemoveRows, SaveDb, LoadDb, ExportTable,
+                             AlterAdd, AlterRemove>;
 
 }  // namespace exdeus::language

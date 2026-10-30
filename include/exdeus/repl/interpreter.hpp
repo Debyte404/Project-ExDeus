@@ -61,6 +61,8 @@ private:
     Result run_create(const exdeus::language::CreateDb& command);
     Result run_harness(const exdeus::language::HarnessDb& command);
     Result run_forge(const exdeus::language::ForgeTable& command);
+    Result run_alter_add(const exdeus::language::AlterAdd& command);
+    Result run_alter_remove(const exdeus::language::AlterRemove& command);
     Result run_add(const exdeus::language::AddRow& command);
     Result run_seek(const exdeus::language::SeekRows& command);
     SeekOutcome run_seek_depth(const exdeus::language::SeekRows& command, int depth);

@@ -188,6 +188,13 @@ void run_lexer_tests() {
         check(at(longs, 3).kind == TokenKind::KwAscending, "ascending still lexes");
     }
 
+    // 13. `alter` and `default` lex as keywords.
+    {
+        auto tokens = lex("alter table t add c: integer default 0;");
+        check(at(tokens, 0).kind == TokenKind::KwAlter, "alter lexes as keyword");
+        check(at(tokens, 7).kind == TokenKind::KwDefault, "default lexes as keyword");
+    }
+
     // 9. Unknown escapes keep the backslash (Windows paths survive the lexer).
     {
         auto kept = lex("\"a\\qb\"");

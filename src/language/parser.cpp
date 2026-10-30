@@ -134,6 +134,7 @@ Command Parser::parse_command() {
         case TokenKind::KwAdd: return parse_add();
         case TokenKind::KwSeek: return parse_seek();
         case TokenKind::KwSort: return parse_sort();
+        case TokenKind::KwAlter: return parse_alter();
         case TokenKind::KwChange: return parse_change();
         case TokenKind::KwRemove: return parse_remove();
         case TokenKind::KwSave: return parse_save();
@@ -141,7 +142,7 @@ Command Parser::parse_command() {
         case TokenKind::KwExport: return parse_export();
         default: break;
     }
-    fail(peek(), "a command (create, harness, forge, add, seek, sort, change, remove, save, load, export)");
+    fail(peek(), "a command (create, harness, forge, add, seek, sort, alter, change, remove, save, load, export)");
 }
 
 CreateDb Parser::parse_create() {
@@ -383,6 +384,28 @@ SeekRows Parser::parse_sort() {
         command.into_table = expect_name("a table name for into");
     }
     return command;
+}
+
+Command Parser::parse_alter() {
+    expect(TokenKind::KwAlter, "'alter'");
+    expect(TokenKind::KwTable, "'table'");
+    std::string table = expect_name("a table name");
+    if (check(TokenKind::KwAdd)) {
+        advance();
+        AlterAdd command{table, parse_column_def(), false,
+                         exdeus::core::Value::boolean(false)};
+        if (check(TokenKind::KwDefault)) {
+            advance();
+            command.default_value = expect_literal("a default value");
+            command.has_default = true;
+        }
+        return command;
+    }
+    if (check(TokenKind::KwRemove)) {
+        advance();
+        return AlterRemove{table, expect_column("a column name")};
+    }
+    fail(peek(), "'add' or 'remove'");
 }
 
 Projection Parser::parse_projection() {

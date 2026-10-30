@@ -26,6 +26,7 @@ const std::unordered_map<std::string, TokenKind>& keywords() {
         {"descending", TokenKind::KwDescending},
         {"asc", TokenKind::KwAsc},         {"desc", TokenKind::KwDesc},
         {"sort", TokenKind::KwSort},
+        {"alter", TokenKind::KwAlter},     {"default", TokenKind::KwDefault},
         {"and", TokenKind::KwAnd},         {"or", TokenKind::KwOr},
         {"equals", TokenKind::KwEquals},   {"above", TokenKind::KwAbove},
         {"below", TokenKind::KwBelow},     {"plus", TokenKind::KwPlus},
@@ -82,6 +83,8 @@ const char* to_string(TokenKind kind) {
         case TokenKind::KwAsc: return "asc";
         case TokenKind::KwDesc: return "desc";
         case TokenKind::KwSort: return "sort";
+        case TokenKind::KwAlter: return "alter";
+        case TokenKind::KwDefault: return "default";
         case TokenKind::KwAnd: return "and";
         case TokenKind::KwOr: return "or";
         case TokenKind::KwEquals: return "equals";

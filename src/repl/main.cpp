@@ -169,6 +169,10 @@ void print_help() {
               << "        subquery in parens\n"
               << "  " << YELLOW << "sort <t> by <col> [asc | desc];" << RESET
               << "       sort rows, asc by default\n"
+              << "  " << YELLOW << "alter table <t> add c: integer null;" << RESET
+              << "  evolve schema, null fills rows\n"
+              << "  " << YELLOW << "alter table <t> remove c;" << RESET
+              << "             drop a column\n"
               << "\n"
               << BOLD << "  files" << RESET << "\n"
               << "  " << YELLOW << "save db to \"bank.exd\";" << RESET
