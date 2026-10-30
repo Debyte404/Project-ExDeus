@@ -10,6 +10,9 @@
 /bin/
 /share/
 
+# Tool droppings (empty regenerating files, never push).
+/.commandcode/
+
 # Local playground: private experiments, never pushed to GitHub.
 /playground/
 
